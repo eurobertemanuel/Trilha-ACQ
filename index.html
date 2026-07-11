@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trilha ACQ · Censo Agropecuário IBGE</title>
+<!-- Firebase (só é usado quando o site roda FORA do claude.ai, para deixar o ranking/banco de questões públicos entre visitantes) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+:root{
+  --paper:#F1EEE3;
+  --paper-dark:#E4DFCF;
+  --ink:#20281F;
+  --forest:#2F5233;
+  --forest-dark:#213B26;
+  --gold:#A9762F;
+  --gold-light:#D4A85E;
+  --slate:#3D5A73;
+  --rust:#8F3A2B;
+  --line:#c9c0a8;
+  --mono: 'IBM Plex Mono', 'Courier New', monospace;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:'Source Sans Pro', Arial, sans-serif;background:var(--paper);color:var(--ink);}
+h1,h2,h3,h4{font-family:'Roboto Slab','Georgia',serif;margin:0 0 8px;color:var(--forest-dark);}
+.mono{font-family:var(--mono);}
+button{font-family:inherit;cursor:pointer;}
+.app{max-width:980px;margin:0 auto;padding:0 18px 60px;}
+header.top{position:sticky;top:0;background:var(--paper);border-bottom:2px solid var(--ink);z-index:50;padding:10px 0;}
+.brandbar{display:flex;align-items:center;justify-content:space-between;max-width:980px;margin:0 auto;padding:0 18px;flex-wrap:wrap;gap:8px;}
+.brand{display:flex;align-items:center;gap:10px;}
+.brand .geocode{font-family:var(--mono);font-size:11px;color:var(--gold);letter-spacing:1px;}
+.brand h1{font-size:20px;margin:0;}
+nav.tabs{display:flex;gap:4px;flex-wrap:wrap;}
+nav.tabs button{background:none;border:1px solid transparent;padding:7px 12px;border-radius:3px;font-size:14px;color:var(--ink);font-weight:600;}
+nav.tabs button.active{background:var(--forest);color:var(--paper);}
+nav.tabs button:not(.active):hover{border-color:var(--line);}
+.hero{padding:34px 0 20px;border-bottom:1px dashed var(--line);margin-bottom:24px;}
+.hero .eyebrow{font-family:var(--mono);font-size:12px;color:var(--gold);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;}
+.hero h2{font-size:30px;line-height:1.15;}
+.hero p{max-width:620px;color:#40493c;}
+.card{background:#fbfaf5;border:1px solid var(--line);border-radius:6px;padding:18px;margin-bottom:16px;}
+.card.dashed{border-style:dashed;}
+.grid{display:grid;gap:14px;}
+.grid.cols2{grid-template-columns:1fr 1fr;}
+.grid.cols3{grid-template-columns:repeat(3,1fr);}
+@media(max-width:700px){.grid.cols2,.grid.cols3{grid-template-columns:1fr;}nav.tabs{width:100%;justify-content:flex-start;}}
+.btn{display:inline-block;background:var(--forest);color:#fff;border:none;padding:11px 20px;border-radius:4px;font-weight:700;font-size:14px;}
+.btn:hover{background:var(--forest-dark);}
+.btn.secondary{background:none;border:1px solid var(--forest);color:var(--forest);}
+.btn.gold{background:var(--gold);}
+.btn.rust{background:var(--rust);}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+.pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;}
+.pill.tecnico{background:#e4ecd f;background:#e2ead9;color:var(--forest-dark);}
+.pill.portugues{background:#e8dfcf;color:var(--gold);}
+.pill.geografia{background:#dbe6ee;color:var(--slate);}
+.pill.rlq{background:#f0dbd4;color:var(--rust);}
+.topic-list{display:grid;gap:12px;}
+.topic-card{border:1px solid var(--line);background:#fbfaf5;border-radius:6px;padding:16px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
+.topic-card .meta{font-family:var(--mono);font-size:11px;color:#7a7563;}
+.progress-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;}
+.progress-dot.done{background:var(--forest);}
+.progress-dot.todo{background:var(--line);}
+.question-box{border:1px solid var(--line);background:#fbfaf5;border-radius:6px;padding:20px;margin-bottom:16px;}
+.opt{display:block;width:100%;text-align:left;padding:11px 14px;margin:8px 0;border:1px solid var(--line);border-radius:4px;background:#fff;font-size:15px;}
+.opt:hover{border-color:var(--forest);}
+.opt.selected{border-color:var(--forest);background:#eaf0e6;}
+.opt.correct{border-color:var(--forest);background:#dcecd7;}
+.opt.wrong{border-color:var(--rust);background:#f5e2dc;}
+.opt.disabled{cursor:default;}
+.timerbar{font-family:var(--mono);font-size:20px;background:var(--ink);color:var(--paper);padding:8px 16px;border-radius:4px;display:inline-block;}
+.explain{margin-top:12px;padding:12px;background:var(--paper-dark);border-left:3px solid var(--gold);font-size:14px;}
+table.ranking{width:100%;border-collapse:collapse;font-size:14px;}
+table.ranking th, table.ranking td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:left;}
+table.ranking th{font-family:var(--mono);font-size:11px;text-transform:uppercase;color:#7a7563;}
+.overlay{position:fixed;inset:0;background:var(--forest-dark);color:var(--paper);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:200;text-align:center;padding:20px;}
+.overlay h2{color:var(--paper);}
+input[type=text],input[type=password],input[type=number],select,textarea{padding:9px 10px;border:1px solid var(--line);border-radius:4px;font-family:inherit;font-size:14px;width:100%;background:#fff;}
+label{font-size:12px;font-family:var(--mono);color:#7a7563;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;}
+.field{margin-bottom:12px;}
+.mm-wrap svg{max-width:100%;}
+.mm-branch-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:14px;}
+.mm-branch-card{border-radius:6px;padding:12px;border:1px solid var(--line);border-top:4px solid var(--forest);background:#fff;}
+.mm-branch-card ul{margin:6px 0 0;padding-left:18px;font-size:13px;}
+footer.compass{text-align:center;padding:30px 0 10px;color:#8a8467;font-size:12px;font-family:var(--mono);}
+.small{font-size:12px;color:#6e694f;}
+.flex-between{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
+.hidden{display:none !important;}
+.errmsg{color:var(--rust);font-size:13px;margin-top:6px;}
+.admin-list{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:4px;padding:8px;background:#fff;}
+.admin-q{padding:8px;border-bottom:1px solid var(--line);font-size:13px;display:flex;justify-content:space-between;gap:8px;}
+.badge-count{font-family:var(--mono);background:var(--paper-dark);padding:2px 8px;border-radius:10px;font-size:11px;}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brandbar">
+    <div class="brand">
+      <span style="font-size:26px;">🧭</span>
+      <div>
+        <h1>Trilha ACQ</h1>
+        <div class="geocode">12º CENSO AGROPECUÁRIO · AGENTE CENSITÁRIO DE QUALIDADE · PROVA 30/AGO</div>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs"></nav>
+  </div>
+</header>
+
+<div class="app" id="app"></div>
+
+<footer class="compass">— N —<br>preparação para o processo seletivo simplificado · dados de estudo salvos neste navegador</footer>
+
+<script>
+/* ============ DADOS: TÓPICOS + MAPAS MENTAIS ============ */
+const TOPICS = [
+{id:'t1', disc:'tecnico', title:'Estrutura do IBGE e da Operação Censitária',
+ resumo:'O IBGE (Fundação Instituto Brasileiro de Geografia e Estatística) é o órgão federal responsável pelas estatísticas e informações geográficas do Brasil, atuando há mais de 80 anos por meio de uma rede permanente de superintendências e agências espalhadas pelo país. Essa rede permanente cuida do funcionamento cotidiano do instituto, mas não seria suficiente, sozinha, para dar conta de uma operação do tamanho de um Censo Agropecuário. Por isso, sempre que uma operação censitária se aproxima, o IBGE monta uma estrutura temporária, paralela à permanente, formada por milhares de profissionais contratados especificamente para aquela coleta: do Centro Nacional de Qualidade, na Sede, no Rio de Janeiro, até os postos censitários espalhados por cada município participante. Essa estrutura temporária é dividida em duas grandes frentes que trabalham lado a lado: a frente operacional, que efetivamente coleta os dados em campo (AOR, ACR, ACS, Recenseador), e a frente de qualidade, que fiscaliza e orienta a correção de erros nessa coleta (CNQ, CEQ, ACQ). Entender quem faz o quê, e a quem cada função se reporta, é essencial não só para a prova, mas para o próprio dia a dia de quem for aprovado.',
+ pontos:['Órgão federal fundado em 1936, com sede no Rio de Janeiro, vinculado à Presidência da República.','Rede permanente: 27 Superintendências Estaduais (26 capitais + Distrito Federal) e 566 agências municipais, funcionando o ano inteiro.','Estrutura temporária de qualidade: Centro Nacional de Qualidade (CNQ, na Sede) e Centros Estaduais de Qualidade (CEQ, nas SES) — atuam paralelamente à coleta, cuidando da consistência dos dados.','Posto censitário: base operacional local de cada Área de Trabalho, com AOR, ACA e ACI dando suporte administrativo, logístico e de TI.','Cadeia de campo (coleta): Recenseador → Agente Censitário Supervisor (ACS) → Agente Censitário Regional (ACR).','O Agente Censitário de Qualidade (ACQ) fica fora da cadeia de coleta: ele atua no CNQ/CEQ, examinando questionários e orientando ACS e Recenseadores sobre correções, sem aplicar entrevistas ele mesmo.','O ACQ é avaliado mensalmente por assiduidade, cumprimento de prazos e produtividade; nota abaixo de 70 pontos leva à rescisão do contrato.'],
+ dica:'A banca adora trocar as siglas parecidas. Decore quem se reporta a quem: Recenseador → ACS → ACR → AOR; e lembre que o ACQ fica de fora dessa cadeia de campo, cuidando exclusivamente da qualidade da informação.',
+ mm:{branches:[
+   {label:'Estrutura Permanente', items:['Sede do IBGE (Rio de Janeiro)','27 Superintendências Estaduais (SES)','566 agências municipais','Funciona o ano inteiro, mesmo fora de Censo']},
+   {label:'Qualidade (temporária)', items:['Centro Nacional de Qualidade (CNQ)','Centro Estadual de Qualidade (CEQ)','Agente Censitário de Qualidade (ACQ)','Foco: consistência e padronização dos dados']},
+   {label:'Posto Censitário', items:['Assistente Operacional Regional (AOR) — gerencia o posto','Agente Censitário Administrativo (ACA)','Agente Censitário de Informática (ACI)','Base de uma ou mais Áreas de Trabalho']},
+   {label:'Cadeia de Campo', items:['Recenseador — coleta em campo','Agente Censitário Supervisor (ACS)','Agente Censitário Regional (ACR)','Sobe até o AOR do posto']},
+   {label:'Avaliação e contrato', items:['Avaliação mensal do ACQ: assiduidade, prazos, produtividade','Nota < 70 pontos = rescisão','Contratos de 30 dias, prorrogáveis']}
+ ]}},
+{id:'t2', disc:'tecnico', title:'Censo Agropecuário: conceitos fundamentais',
+ resumo:'O Censo Agropecuário, Florestal e Aquícola é uma pesquisa do tipo censitária: isso significa que ela investiga todo o universo de estabelecimentos agropecuários do país, e não apenas uma amostra estatística — diferente, por exemplo, de uma pesquisa amostral, que estima resultados a partir de uma parcela da população. O 12º Censo Agropecuário terá sua coleta realizada em 2027, mas os dados coletados dizem respeito à situação do ano de 2026 — esse é o chamado período de referência. Cada estabelecimento visitado é registrado e detalhado usando o Dispositivo Móvel de Coleta (DMC), um tablet equipado com mapas digitais e imagens de satélite que ajudam o Recenseador a localizar exatamente onde fica cada unidade produtiva, mesmo em áreas rurais sem endereço tradicional. Compreender bem os conceitos de universo, unidade de investigação e tempo de referência é a base para entender praticamente todo o resto do conteúdo técnico da prova, já que muitas questões de situações especiais (estabelecimento, setor, endereçamento) partem desses mesmos conceitos.',
+ pontos:['Pesquisa censitária = investiga 100% do universo, ao contrário de uma pesquisa amostral, que investiga apenas uma parte e depois generaliza os resultados.','Unidade de investigação: o estabelecimento agropecuário, qualquer que seja seu tamanho, forma jurídica ou localização (urbana ou rural).','Coleta feita por DMC (tablet), com apoio de mapas digitais e imagens de satélite, permitindo georreferenciar cada estabelecimento visitado.','12º Censo: coleta em 2027, com data de referência em 31/12/2026 e período de referência o ano civil de 2026.','Data de referência = o momento específico da situação (um instante); período de referência = o intervalo de tempo investigado (geralmente o ano inteiro).','Estimativa de cerca de 5,1 milhões de estabelecimentos agropecuários a serem visitados no Brasil.','Desde 1996, os Censos Agropecuários seguem, em geral, um intervalo de aproximadamente 10 anos entre uma edição e a seguinte (1996, 2007, 2017, 2027).'],
+ dica:'Não confunda: "data de referência" é um instante (um dia); "período de referência" é um intervalo (o ano inteiro). É pegadinha certa, e costuma aparecer disfarçada em enunciados longos.',
+ mm:{branches:[
+   {label:'Conceito', items:['Pesquisa censitária = investiga o universo inteiro','Diferente de pesquisa amostral','Unidade: o estabelecimento agropecuário']},
+   {label:'Instrumentos', items:['Dispositivo Móvel de Coleta (DMC)','Mapas digitais','Imagens de satélite','Georreferenciamento de cada estabelecimento']},
+   {label:'Tempo', items:['Data de referência (um instante: 31/12/2026)','Período de referência (o ano civil de 2026)','Diferença é pegadinha clássica de prova']},
+   {label:'12º Censo (2027)', items:['Coleta em 2027','Referência: ano de 2026','~5,1 milhões de estabelecimentos estimados','Periodicidade de ~10 anos desde 1996']}
+ ]}},
+{id:'t3', disc:'tecnico', title:'Estabelecimento agropecuário: casos especiais',
+ resumo:'Nem toda propriedade rural é, automaticamente, um estabelecimento agropecuário recenseável — só é considerado estabelecimento quem exerce ali uma atividade de produção ou exploração agropecuária, florestal ou aquícola, seja para venda, seja para subsistência da própria família. Um simples quintal com algumas plantas de lazer, sem nenhuma finalidade comercial ou de consumo relevante, não configura um estabelecimento. A partir desse conceito básico, a prova costuma explorar diversas situações especiais que fogem do caso mais simples (uma família, uma terra, uma produção): produtores que não possuem área própria (como apicultores e extrativistas), estabelecimentos cuja área se espalha por mais de um município ou setor, situações de herança em que a terra ainda não foi formalmente dividida, e explorações comunitárias em que várias famílias trabalham juntas na mesma área. Cada uma dessas situações tem uma regra própria de como proceder na hora de decidir se existe um ou vários estabelecimentos, e é justamente aí que mora a maior parte das pegadinhas dessa parte da prova.',
+ pontos:['Estabelecimento = unidade de produção/exploração agropecuária, florestal ou aquícola, para venda ou subsistência — independentemente do tamanho.','Não é recenseável quando a produção existe só para lazer/passatempo do morador, sem finalidade comercial nem de subsistência real.','Produtor sem área: explora terra que não é sua e ainda assim deve ser recenseado (ex.: apicultor que instala colmeias em mata de terceiros, extrativista de babaçu/castanha/látex).','Sede define o setor/município de recenseamento quando a área do estabelecimento cruza limites territoriais; na ausência de sede, vale o setor com maior parte das terras.','Áreas não contínuas só formam um único estabelecimento se, ao mesmo tempo: (1) mesmo município, (2) mesmos recursos técnicos, (3) mesmo pessoal, (4) mesma administração.','Sucessão/partilha com consenso entre herdeiros = um único estabelecimento (informado pelo inventariante); sem consenso, com cada herdeiro ocupando uma parte = estabelecimentos distintos.','Exploração comunitária: produção coletiva = um único questionário; produção individual por família = um questionário para cada família.','Estabelecimento em litígio (disputa judicial): considera-se produtor quem era responsável economicamente pela exploração na data de referência.'],
+ dica:'As "quatro condições" das áreas não contínuas são item clássico: memorize com o mote "Município, Técnica, Pessoal, Administração" — basta uma delas falhar para que virem estabelecimentos separados.',
+ mm:{branches:[
+   {label:'Recenseável x não', items:['Produção p/ venda ou subsistência = recenseável','Só lazer/passatempo = não recenseável','Independe do tamanho da área']},
+   {label:'Produtor sem área', items:['Apicultor em mata de terceiros','Extrativista (babaçu, castanha, látex)','Ainda assim é recenseado normalmente']},
+   {label:'Áreas não contínuas', items:['Mesmo município','Mesmos recursos técnicos','Mesmo pessoal','Mesma administração']},
+   {label:'Sucessão / Partilha / Litígio', items:['Consenso = 1 estabelecimento','Sem consenso = vários estabelecimentos','Litígio = considera quem explora na data de referência']},
+   {label:'Exploração comunitária', items:['Produção coletiva = 1 questionário','Produção individual = 1 por família']}
+ ]}},
+{id:'t4', disc:'tecnico', title:'Setores censitários, tipos especiais e PCTs',
+ resumo:'O setor censitário é a menor unidade territorial definida pelo IBGE para organizar a coleta de dados: cada setor é atribuído a um único Recenseador, que fica responsável por percorrer toda a sua área. Cada setor recebe um geocódigo, um número que o identifica de forma exclusiva, combinando informações da Unidade da Federação, do município, do distrito, do subdistrito e do próprio número do setor. Além dos setores mais comuns (urbanos e rurais comuns), existem diversos tipos especiais, criados para dar conta de situações particulares de ocupação do território: agrovilas ligadas a assentamentos, quartéis e bases militares, unidades prisionais, hospitais e instituições de longa permanência, além de agrupamentos indígenas e quilombolas. A maioria desses tipos especiais segue a regra de 50 habitantes residindo há mais de um ano no local, exceto os agrupamentos indígenas e quilombolas, que exigem apenas 15 indivíduos. Paralelamente à setorização tradicional, o IBGE também trabalha com o conceito de Povos e Comunidades Tradicionais (PCTs) — indígenas, quilombolas, povos ciganos, pescadores artesanais, extrativistas, entre outros — cujo pertencimento é sempre autodeclaratório, e com as Áreas de Interesse Operacional (AIOs), que não seguem necessariamente os limites dos setores censitários comuns.',
+ pontos:['Setor censitário = menor unidade territorial definida pelo IBGE para a coleta, atribuída a um único Recenseador.','Geocódigo identifica cada setor de forma única (UF + município + distrito + subdistrito + número do setor).','Tipos especiais com regra geral de 50 habitantes residindo há mais de 1 ano: quartel/base militar, alojamento/acampamento, unidade prisional, convento/hospital/ILPI/IACA, agrovila (mais de 50 domicílios ligados a um Projeto de Assentamento).','Exceção à regra dos 50: agrupamentos indígenas e quilombolas exigem apenas 15 indivíduos autodeclarados, residentes em moradias contíguas com vínculos familiares/comunitários.','PCTs (povos e comunidades tradicionais): indígenas, quilombolas, povos ciganos, pescadores artesanais, extrativistas, entre outros — pertencimento étnico é sempre autodeclaratório, sem questionamento do Recenseador.','Área de Interesse Operacional (AIO) não segue a setorização tradicional do IBGE: pode ser menor ou maior que um setor censitário, chegando a cobrir um município inteiro.','Setores do tipo "massa d\'água" correspondem a grandes porções de água que não são áreas de coleta, mas podem interferir na operação (ex.: exigir contorno da rota).','Unidades de Conservação, Terras Indígenas e Territórios Quilombolas oficialmente delimitados são reconhecidos oficialmente pelo Estado como áreas de PCTs.'],
+ dica:'Dois números decoram quase tudo dessa parte: "50 habitantes" (maioria dos tipos especiais) e "15 indivíduos" (indígenas e quilombolas). Se a questão trocar esses números, é pegadinha na certa.',
+ mm:{branches:[
+   {label:'Setor Censitário', items:['Menor unidade territorial de coleta','Geocódigo único (UF/município/distrito/setor)','Atribuído a um único Recenseador']},
+   {label:'Tipos especiais (50 hab.)', items:['Quartel / Base Militar','Unidade Prisional','Agrovila (+50 domicílios)','Hospital / ILPI / IACA']},
+   {label:'Tipos especiais (15 ind.)', items:['Agrupamento Indígena','Agrupamento Quilombola','Moradias contíguas + vínculo comunitário']},
+   {label:'PCTs', items:['Pertencimento é autodeclaratório','Indígenas, quilombolas, povos ciganos, extrativistas','UCs e Terras Indígenas delimitadas oficialmente']},
+   {label:'AIOs e massas d\'água', items:['AIO não segue a setorização do IBGE','Pode cobrir um município inteiro','Massa d\'água não é área de coleta']}
+ ]}},
+{id:'t5', disc:'tecnico', title:'Mapas, endereçamento e coordenadas geográficas',
+ resumo:'Em campo, o Recenseador conta com três ferramentas principais para se localizar e organizar seu trabalho: o Mapa Municipal Estatístico, que mostra a visão geral de todos os setores do município; o mapa do próprio setor, na escala adequada para o tipo de área (rural ou urbana); e o descritivo do setor, um texto que detalha o perímetro da área sob sua responsabilidade. A escala do mapa expressa a proporção entre a distância representada no papel e a distância real no terreno — dominar as contas de conversão de escala é fundamental, pois esse tipo de cálculo aparece tanto em Conhecimentos Técnicos quanto em Raciocínio Lógico. Quando o Recenseador chega a um estabelecimento, o endereço é registrado seguindo o padrão CNEFE do IBGE, e a localização final é confirmada por meio de coordenadas geográficas — latitude e longitude — capturadas idealmente na entrada da edificação-sede do estabelecimento. Interpretar corretamente as imagens de satélite (reconhecendo pastagens, construções, corpos d\'água e vegetação por suas cores e formas) também é parte importante dessa etapa de campo.',
+ pontos:['Escala do mapa é a proporção entre a distância no papel e a distância real (ex.: 1:50.000 → 1 cm no mapa = 500 m reais).','O descritivo do setor tem 5 partes: ponto inicial/final; descrição do perímetro; setores a excluir; estruturas territoriais não setorizadas; acessibilidade e observações.','O Mapa Municipal Estatístico (MME) mostra a visão geral de todos os setores do município e suas vias de acesso, ajudando no planejamento da chegada ao setor.','Endereço no padrão CNEFE: logradouro, localidade, CEP, número/modificador, complemento e ponto de referência.','Ponto de referência é obrigatório quando o endereço não tem número nem complemento que permita localizá-lo — comum em áreas rurais.','Latitude: 0° a 90°, Norte ou Sul (afastamento em relação à Linha do Equador).','Longitude: 0° a 180°, Leste ou Oeste (afastamento em relação ao Meridiano de Greenwich).','No Brasil, as coordenadas em geral aparecem negativas: latitude negativa = Sul; longitude negativa = Oeste.','O local ideal de captura da coordenada é a entrada da edificação-sede do estabelecimento, quando ela existir.','Em imagens de satélite, pastagens costumam aparecer em tons de verde; é essencial sempre checar a legenda antes de interpretar um símbolo do mapa.'],
+ dica:'Treine a conversão de escala com calma: cm no mapa × denominador da escala = cm reais; depois converta para metros (÷100) e km (÷1000). É a mesma lógica de uma regra de três simples.',
+ mm:{branches:[
+   {label:'Mapa do Setor', items:['Escala (proporção mapa x realidade)','Imagem de satélite (forma, tamanho, cor)','Sempre checar a legenda antes de interpretar']},
+   {label:'Descritivo do Setor', items:['Ponto inicial/final','Perímetro','Setores a excluir','Acessibilidade e observações']},
+   {label:'Mapa Municipal (MME)', items:['Visão geral de todos os setores','Vias de acesso ao município','Ajuda no planejamento da chegada']},
+   {label:'Endereço (CNEFE)', items:['Logradouro e localidade','Número, modificador, complemento','Ponto de referência (obrigatório em área rural)']},
+   {label:'Coordenadas', items:['Latitude: 0°-90° N/S','Longitude: 0°-180° L/O','Captura na entrada da sede do estabelecimento']}
+ ]}},
+{id:'t6a', disc:'portugues', title:'Português: Interpretação de Texto',
+ resumo:'Nesta parte da prova, o mais importante é responder exatamente com base no que o texto diz — não no que você já sabe sobre o assunto por fora, nem no que "acha" que o autor quis dizer sem ter escrito isso. Bancas de concurso costumam montar alternativas que são verdadeiras "no mundo real", mas falsas em relação ao que aquele texto específico afirmou; e o contrário também acontece, com alternativas que parecem estranhas mas estão perfeitamente sustentadas pelo trecho. Por isso, o primeiro passo diante de qualquer questão de interpretação é reler o comando (o que exatamente está sendo perguntado) e depois voltar ao texto para localizar a frase ou o trecho que sustenta cada alternativa, eliminando uma a uma as que contradizem ou extrapolam o que foi dito. Preste atenção especial a: qual é a ideia central versus quais são detalhes secundários; se há uma relação de causa e consequência entre duas partes do texto; e se algum conectivo (mas, porém, portanto, além disso) está sinalizando uma mudança de direção do raciocínio do autor.',
+ pontos:['Responda sempre com base no que o texto diz, não no que você sabe do assunto por fora dele.','Distinga a ideia central (o argumento principal) dos detalhes e exemplos que apenas ilustram esse argumento.','Desconfie de alternativas que usam palavras absolutas como "sempre", "nunca", "exclusivamente" — o texto raramente sustenta esse grau de certeza.','Observe conectivos: eles indicam a lógica interna do texto (oposição, conclusão, adição, causa e efeito).','Elimine primeiro as alternativas claramente contraditórias ao texto; depois compare as remanescentes com o trecho exato que cada uma tenta representar.','Reler o comando da questão antes de responder evita cair em alternativas que respondem a uma pergunta diferente da que foi feita.'],
+ dica:'Ao terminar de ler o texto, tente resumir mentalmente, em uma frase, "o que o autor quis dizer". Se uma alternativa contradiz esse resumo, ela provavelmente está errada.',
+ mm:{branches:[
+   {label:'Estratégia de leitura', items:['Responder com base no texto','Reler o comando da questão','Resumir a ideia central em uma frase']},
+   {label:'Estrutura do texto', items:['Ideia central x detalhes','Exemplos apenas ilustram o argumento','Conectivos revelam a lógica interna']},
+   {label:'Armadilhas comuns', items:['Palavras absolutas ("sempre","nunca")','Alternativas verdadeiras mas fora do texto','Extrapolação do que foi realmente dito']},
+   {label:'Técnica de eliminação', items:['Elimine contradições primeiro','Compare as remanescentes com o trecho exato','Escolha a mais sustentada pelo texto']}
+ ]}},
+{id:'t6b', disc:'portugues', title:'Português: Gramática Aplicada',
+ resumo:'Além da interpretação, a prova cobra o domínio de pontos gramaticais que aparecem com muita frequência em concursos de nível médio. Crase é, disparada, um dos temas mais cobrados: ela representa a fusão da preposição "a" com o artigo feminino "a", e só ocorre diante de palavras femininas que aceitem esse artigo — o teste mais seguro é substituir a palavra feminina por uma masculina equivalente; se aparecer "ao", há crase, se aparecer só "o", não há. Concordância verbal e nominal também rendem muitas questões, principalmente com o verbo "fazer" indicando tempo decorrido (sempre impessoal, no singular) e com adjetivos como "anexo", que concordam em gênero e número com o substantivo a que se referem. Regência verbal (como "assistir a", "aspirar a", "preferir a") e colocação pronominal (evitar iniciar frases com pronome oblíquo átono) completam o conjunto de armadilhas gramaticais mais cobradas. Por fim, vale reforçar ortografia (pares como "beneficente/beneficiente", "mau/mal") e pontuação, especialmente o uso de vírgulas para isolar apostos explicativos.',
+ pontos:['Crase: só existe antes de palavra feminina que aceite o artigo "a" — teste seguro é trocar por uma palavra masculina equivalente.','Concordância verbal com "fazer" indicando tempo: verbo fica sempre na 3ª pessoa do singular ("faz dois anos", nunca "fazem dois anos"); o mesmo vale para "haver" no sentido de existir ("havia muitos candidatos").','Concordância nominal: adjetivos como "anexo", "incluso", "obrigado" concordam em gênero e número com o substantivo referido ("seguem anexas as fotocópias").','Regência do verbo "assistir" no sentido de "ver": exige preposição "a" ("assistir à palestra"); atenção a outros verbos regidos por preposição, como "aspirar a" e "preferir a".','Colocação pronominal: a norma-padrão evita iniciar frases com pronome oblíquo átono ("Disseram-me", e não "Me disseram", em início de frase).','"Mau" é adjetivo (oposto de "bom"); "mal" é advérbio (oposto de "bem") ou substantivo — não confunda os dois.','"Onde" indica permanência em um lugar; "aonde" indica movimento em direção a um lugar (usado com verbos como "ir", "chegar").','Ortografia: fique atento a pares como "beneficente/beneficiente" (a forma correta é "beneficente").','Pontuação: apostos explicativos são isolados por vírgulas dos dois lados.','"Por que" (separado, sem acento) é usado em perguntas diretas ou indiretas; "porquê" (substantivo) é usado quando precedido de artigo, como em "o porquê da demora".'],
+ dica:'Na dúvida sobre crase, substitua a palavra feminina por uma masculina: se aparecer "ao", há crase; se aparecer só "o", não há. Esse mesmo truque resolve boa parte das questões de crase de qualquer prova.',
+ mm:{branches:[
+   {label:'Crase', items:['Preposição "a" + artigo "a"','Teste: trocar por palavra masculina','Só antes de palavra feminina']},
+   {label:'Concordância', items:['"Faz"/"havia" (tempo/existência) no singular','Sujeito e verbo concordam em número/pessoa','"Anexo/anexas" concorda com o substantivo']},
+   {label:'Regência e Colocação', items:['Assistir a algo (ver)','Preferir algo a outro algo','Evitar pronome átono no início da frase']},
+   {label:'Pares que confundem', items:['Mau (adjetivo) x Mal (advérbio)','Onde (permanência) x Aonde (movimento)','Por que / Porque / Porquê / Por quê']},
+   {label:'Ortografia e Pontuação', items:['Beneficente, não beneficiente','Vírgulas isolam o aposto explicativo','Acentuação de proparoxítonas e hiatos']}
+ ]}},
+{id:'t7a', disc:'geografia', title:'Geografia: Divisão Territorial e Demografia',
+ resumo:'O território brasileiro se organiza em uma hierarquia clara de unidades administrativas: no topo estão as 27 Unidades da Federação (26 estados mais o Distrito Federal, que tem estatuto próprio, distinto do de um estado comum, por sediar o governo federal). Cada Unidade da Federação se divide integralmente em municípios — atualmente 5.569 no país —, que por sua vez podem se subdividir em distritos, sem autonomia administrativa própria, subordinados ao governo municipal. Em algumas grandes cidades, os distritos ainda se dividem em subdistritos, mas isso é exceção, não regra: a maioria dos municípios brasileiros não possui subdistritos. Do ponto de vista demográfico, o Brasil é hoje um país predominantemente urbano, com a maior parte da população concentrada em cidades, ainda que o Censo Agropecuário tenha como foco justamente a atividade econômica que ocorre, majoritariamente, fora dessas áreas urbanas densas.',
+ pontos:['O Brasil tem 26 estados e o Distrito Federal, totalizando 27 Unidades da Federação.','O Distrito Federal tem estatuto próprio, distinto do de um estado, por sediar o governo federal.','São 5.569 municípios no país, que dividem integralmente as Unidades da Federação.','Distritos dividem os municípios e não têm autonomia administrativa (subordinados ao governo municipal).','Subdistritos existem apenas em grandes cidades (cerca de 645 no país); a maioria dos municípios não os possui.','O Brasil é dividido oficialmente pelo IBGE em 5 grandes regiões: Norte, Nordeste, Centro-Oeste, Sudeste e Sul.','A maior parte da população brasileira vive em áreas urbanas.','Um aglomerado rural reúne domicílios próximos entre si (normalmente a não mais de 50 m de distância), separados da franja urbana por mais de 1 km.'],
+ dica:'Grave a hierarquia territorial na ordem: Unidade da Federação → Município → Distrito → Subdistrito → Setor censitário. Questões adoram inverter essa ordem em alternativas erradas.',
+ mm:{branches:[
+   {label:'Unidades da Federação', items:['26 estados + Distrito Federal','27 UFs no total','DF tem estatuto próprio']},
+   {label:'Municípios', items:['5.569 municípios no Brasil','Dividem integralmente as UFs']},
+   {label:'Distritos e Subdistritos', items:['Distrito: sem autonomia administrativa','Subdistrito: só em grandes cidades (~645)']},
+   {label:'Regiões do Brasil', items:['5 grandes regiões oficiais','Norte, Nordeste, Centro-Oeste, Sudeste, Sul']},
+   {label:'População', items:['Maioria em área urbana','Aglomerado rural: domicílios próximos, separados da cidade']}
+ ]}},
+{id:'t7b', disc:'geografia', title:'Geografia: Cartografia e Leitura de Mapas',
+ resumo:'Saber ler um mapa corretamente é uma habilidade prática cobrada tanto em Geografia quanto em Conhecimentos Técnicos e Raciocínio Lógico. A escala indica a proporção entre a distância representada no papel (ou na tela) e a distância real no terreno — dominar essa conversão é essencial para estimar distâncias reais a partir de um mapa. A legenda reúne os símbolos e cores usados para representar estradas, rios, construções e outros elementos: nunca se deve tentar interpretar um símbolo sem antes checar o que a legenda diz sobre ele. Mapas topográficos usam curvas de nível para representar o relevo, conectando pontos de mesma altitude. Já as imagens de satélite, cada vez mais usadas em operações de campo, permitem reconhecer visualmente elementos do território pelas suas cores e formas características — pastagens em tons de verde, construções em tons de vermelho, cinza ou branco, corpos d\'água em tons de azul. Por fim, vale saber que o Brasil possui oficialmente 4 fusos horários, ainda que a maior parte do território utilize o horário de Brasília (UTC-3) no dia a dia.',
+ pontos:['A escala expressa a proporção entre a distância no mapa e a distância real no terreno.','A legenda apresenta os símbolos e cores usados para representar elementos do mapa (estradas, rios, construções); sempre consulte-a antes de interpretar um símbolo.','Curvas de nível, em mapas topográficos, conectam pontos de mesma altitude, representando o relevo.','Em imagens de satélite, pastagens tendem a aparecer em tons de verde, construções em tons de vermelho/cinza/branco, e corpos d\'água em tons de azul.','O Brasil possui oficialmente 4 fusos horários, ainda que a maior parte do território utilize o horário de Brasília (UTC-3).','A conversão de escala segue a mesma lógica de uma regra de três simples: cm no mapa × denominador da escala = distância real em centímetros.'],
+ dica:'Sempre que o enunciado der uma escala e uma medida no mapa, monte a conta como uma regra de três: distância no mapa × denominador da escala = distância real (em cm), depois converta para metros ou km.',
+ mm:{branches:[
+   {label:'Escala', items:['Proporção mapa x realidade','Mesma lógica de uma regra de três','Sempre converter cm → m → km']},
+   {label:'Legenda', items:['Símbolos e cores do mapa','Nunca interpretar sem consultar','Essencial em mapas de setor']},
+   {label:'Relevo', items:['Curvas de nível = mesma altitude','Usadas em mapas topográficos']},
+   {label:'Imagens de satélite', items:['Pastagens: tons de verde','Construções: vermelho/cinza/branco','Água: tons de azul']},
+   {label:'Fusos horários', items:['4 fusos horários oficiais no Brasil','Maior parte usa Brasília (UTC-3)']}
+ ]}},
+{id:'t7c', disc:'geografia', title:'Geografia: Relevo, Biomas e Hidrografia',
+ resumo:'O relevo brasileiro é caracterizado principalmente por planaltos e depressões, com poucas elevações muito altas — não existem, no território nacional, grandes cadeias de montanhas comparáveis à Cordilheira dos Andes. Essa característica facilita, de forma geral, o acesso a boa parte do território, embora a densidade da vegetação e a distância entre estabelecimentos continuem sendo desafios logísticos importantes para a coleta censitária. Do ponto de vista dos biomas, a Amazônia predomina na Região Norte, sendo o maior bioma brasileiro e de grande relevância para a atividade de exploração florestal investigada pelo Censo; já o Cerrado, marcado por vegetação de savana, predomina no Centro-Oeste e parte do Sudeste, sendo hoje uma das principais fronteiras agrícolas do país. Em termos de hidrografia, a Bacia Amazônica é a maior do mundo em volume de água, e grande parte da produção agropecuária brasileira depende, direta ou indiretamente, da disponibilidade hídrica dessas grandes bacias.',
+ pontos:['O relevo predominante no Brasil é formado por planaltos e depressões, sem grandes cadeias montanhosas.','A Amazônia é o bioma predominante na Região Norte do país, e o maior bioma brasileiro em extensão.','O Cerrado, marcado por vegetação de savana, predomina no Centro-Oeste e parte do Sudeste, sendo importante fronteira agrícola.','A Bacia Amazônica é a maior bacia hidrográfica do Brasil e também do mundo em volume de água.','A disponibilidade hídrica das grandes bacias influencia diretamente a distribuição da atividade agropecuária pelo território.'],
+ dica:'Associe cada bioma à sua região predominante: Amazônia → Norte; Cerrado → Centro-Oeste; Mata Atlântica → faixa litorânea do Sul ao Nordeste; Caatinga → Nordeste semiárido; Pampa → Sul.',
+ mm:{branches:[
+   {label:'Relevo', items:['Planaltos e depressões predominam','Sem grandes cadeias montanhosas']},
+   {label:'Amazônia', items:['Predomina na Região Norte','Maior bioma brasileiro','Foco de exploração florestal']},
+   {label:'Cerrado', items:['Predomina no Centro-Oeste','Vegetação de savana','Importante fronteira agrícola']},
+   {label:'Hidrografia', items:['Bacia Amazônica: maior do mundo em volume','Disponibilidade hídrica influencia a produção agropecuária']}
+ ]}},
+{id:'t8a', disc:'rlq', title:'RLQ: Regra de Três e Porcentagem',
+ resumo:'Regra de três e porcentagem são os assuntos mais recorrentes de Raciocínio Lógico Quantitativo em provas de nível médio, e costumam aparecer disfarçados em situações do dia a dia da operação censitária (número de estabelecimentos visitados, equipes de trabalho, prazos de coleta). Na regra de três simples, o segredo é montar corretamente a proporção entre as duas grandezas envolvidas, identificando se a relação é diretamente proporcional (quando uma grandeza aumenta, a outra também aumenta, na mesma razão) ou inversamente proporcional (quando uma aumenta, a outra diminui). Já as questões de porcentagem, na maioria das vezes, pedem para calcular X% de um valor: basta multiplicar o valor por X e dividir o resultado por 100. Uma boa prática é sempre escrever, antes de calcular, o que o enunciado dá e o que ele pede, numa espécie de tabelinha — isso evita o erro mais comum nesse tipo de questão, que é trocar os termos da proporção.',
+ pontos:['Regra de três simples direta: quando as grandezas crescem juntas, monte a proporção e resolva por multiplicação cruzada.','Regra de três simples inversa: quando uma grandeza cresce e a outra diminui (ex.: mais equipes, menos dias), multiplique os dois valores conhecidos e divida pelo valor restante.','Porcentagem: para achar X% de um valor, multiplique o valor por X e divida por 100.','Aumento percentual: para aumentar um valor em X%, multiplique-o por (1 + X/100).','Releia o enunciado duas vezes antes de calcular — a maioria dos erros nessa parte é de interpretação (trocar os termos), não de conta em si.','Converta sempre as unidades para a mesma base antes de montar a proporção (ex.: horas e minutos, metros e centímetros).'],
+ dica:'Antes de calcular, escreva o que o enunciado dá e o que ele pede em uma tabelinha de duas colunas — isso evita trocar os termos da proporção, o erro mais comum nesse tipo de questão.',
+ mm:{branches:[
+   {label:'Regra de três direta', items:['Grandezas crescem juntas','Multiplicação cruzada']},
+   {label:'Regra de três inversa', items:['Uma cresce, outra diminui','Multiplica os conhecidos, divide pelo restante']},
+   {label:'Porcentagem', items:['valor × X ÷ 100','Aumento: valor × (1 + X/100)']},
+   {label:'Cuidados práticos', items:['Escrever dados numa tabelinha','Converter unidades antes de calcular']}
+ ]}},
+{id:'t8b', disc:'rlq', title:'RLQ: Sequências e Lógica Proposicional',
+ resumo:'Questões de sequência numérica pedem para identificar o padrão de formação de uma lista de números e, a partir dele, prever o próximo termo. O primeiro passo é sempre observar a diferença entre termos consecutivos (o que indica uma progressão aritmética, de razão constante somada) ou a razão entre eles (o que indica uma progressão geométrica, de razão constante multiplicada); em sequências um pouco mais elaboradas, a diferença entre termos pode, ela mesma, seguir um padrão (como números ímpares crescentes). Já as questões de lógica proposicional avaliam a capacidade de tirar conclusões válidas a partir de uma ou mais premissas dadas como verdadeiras — o erro mais comum aqui é confundir uma afirmação com sua recíproca (trocar "se A, então B" por "se B, então A", que nem sempre é verdadeira) ou não perceber que a contrapositiva de uma afirmação ("quem não é B, não é A") é sempre logicamente equivalente à afirmação original.',
+ pontos:['Observe primeiro a diferença entre termos consecutivos (progressão aritmética) e depois a razão entre eles (progressão geométrica).','Em sequências mais elaboradas, a própria diferença entre os termos pode seguir um padrão (ex.: números ímpares crescentes).','Lógica proposicional: "se todo A é B" não permite concluir que "todo B é A" (isso seria a recíproca, nem sempre verdadeira).','A contrapositiva de "todo A é B" é "quem não é B, não é A" — e essa, sim, é sempre logicamente equivalente à afirmação original.','Cuidado com premissas parciais ("alguns A são B"): elas não permitem concluir nada sobre todos os elementos de A.'],
+ dica:'Em questões de lógica com "todo A é B", a pegadinha mais comum é uma alternativa com a recíproca ("todo B é A"). Desconfie sempre que essa relação aparecer invertida.',
+ mm:{branches:[
+   {label:'Progressão Aritmética', items:['Diferença constante entre termos','Ex.: 2, 5, 8, 11, 14 (razão +3)']},
+   {label:'Progressão Geométrica', items:['Razão constante (multiplicação)','Ex.: 3, 6, 12, 24 (razão ×2)']},
+   {label:'Sequências elaboradas', items:['A própria diferença segue um padrão','Ex.: diferenças 3, 5, 7, 9 (ímpares)']},
+   {label:'Lógica proposicional', items:['Recíproca nem sempre é verdadeira','Contrapositiva sempre é equivalente']}
+ ]}},
+{id:'t8c', disc:'rlq', title:'RLQ: Probabilidade, Médias e Escala',
+ resumo:'Probabilidade simples em provas de nível médio quase sempre se resume à divisão entre o número de casos favoráveis e o número total de casos possíveis, expressa como fração, decimal ou porcentagem. Média aritmética simples, por sua vez, é calculada somando todos os valores de um conjunto e dividindo o resultado pela quantidade de valores somados — é uma ferramenta usada, por exemplo, para calcular o desempenho médio de um candidato em vários simulados. Já a escala de mapas, apesar de aparecer também em Geografia e Conhecimentos Técnicos, é fundamentalmente uma questão de proporção matemática: resolve-se exatamente com a mesma lógica de uma regra de três simples, multiplicando a distância no mapa pelo denominador da escala para obter a distância real.',
+ pontos:['Probabilidade simples = número de casos favoráveis dividido pelo número total de casos possíveis.','Média aritmética simples = soma de todos os valores dividida pela quantidade de valores.','Escala de mapas é resolvida com a mesma lógica de uma regra de três: distância no mapa × denominador da escala = distância real (em cm).','Sempre converta o resultado final para a unidade pedida no enunciado (cm, m ou km).','Releia o enunciado para confirmar se ele pede a probabilidade em fração, decimal ou porcentagem — a resposta certa muda de acordo com esse formato pedido.'],
+ dica:'Em probabilidade, sempre confirme o total de casos possíveis antes de calcular — um erro comum é esquecer de somar todos os elementos do conjunto (ex.: bolas de cores diferentes numa urna).',
+ mm:{branches:[
+   {label:'Probabilidade', items:['Casos favoráveis / casos totais','Pode ser fração, decimal ou %']},
+   {label:'Média Aritmética', items:['Soma dos valores ÷ quantidade de valores','Usada em desempenho de simulados']},
+   {label:'Escala (proporção)', items:['Mesma lógica de regra de três','distância no mapa × denominador = distância real']}
+ ]}}
+];
+
+const DISC_LABEL = {tecnico:'Conhecimentos do IBGE', portugues:'Língua Portuguesa', geografia:'Geografia', rlq:'Raciocínio Lógico'};
+const DISC_COLOR = {tecnico:'#2F5233', portugues:'#A9762F', geografia:'#3D5A73', rlq:'#8F3A2B'};
+
+/* ============ BANCO DE QUESTÕES ============ */
+const QBANK_SEED = [
+// t1
+{topic:'t1',disc:'tecnico',q:'No 12º Censo Agropecuário, quem coordena, em nível estadual, o monitoramento da qualidade dos dados coletados?',opts:['Centro Nacional de Qualidade (CNQ)','Centro Estadual de Qualidade (CEQ)','Assistente Operacional Regional (AOR)','Agente Censitário de Informática (ACI)'],a:1,exp:'O CEQ é vinculado às Superintendências Estaduais e responde, em nível estadual, pelo monitoramento da qualidade dos dados; o CNQ atua em nível nacional.'},
+{topic:'t1',disc:'tecnico',q:'Quantas Superintendências Estaduais (SES) compõem a rede permanente do IBGE?',opts:['26','27','24','30'],a:1,exp:'São 27 SES: 26 nas capitais dos estados e 1 no Distrito Federal.'},
+{topic:'t1',disc:'tecnico',q:'A quem o Recenseador deve se reportar sempre que encontrar dificuldade ou dúvida em campo?',opts:['Ao Agente Censitário Regional (ACR)','Ao Agente Censitário Supervisor (ACS)','Ao Analista Censitário Nacional','Ao Centro Nacional de Qualidade (CNQ)'],a:1,exp:'O ACS é o elo direto entre o Recenseador e a gestão do posto censitário, sendo o responsável por seu treinamento e suporte.'},
+{topic:'t1',disc:'tecnico',q:'O Agente Censitário de Qualidade (ACQ) atua principalmente:',opts:['Coletando dados diretamente com os produtores rurais','Supervisionando a qualidade dos dados coletados em campo','Gerindo o posto censitário e suas instruções administrativas','Prestando suporte de tecnologia da informação ao AOR'],a:1,exp:'O ACQ orienta ACS e Recenseadores na correção de erros identificados, atuando na supervisão da qualidade.'},
+{topic:'t1',disc:'tecnico',q:'Quem é responsável por gerir o posto censitário e garantir que as instruções operacionais, técnicas e administrativas sejam observadas?',opts:['Agente Censitário Regional (ACR)','Assistente Operacional Regional (AOR)','Agente Censitário Administrativo (ACA)','Agente Censitário Supervisor (ACS)'],a:1,exp:'O AOR gerencia o posto censitário como um todo, garantindo o cumprimento das instruções.'},
+{topic:'t1',disc:'tecnico',q:'Assinale a alternativa que apresenta corretamente a ordem hierárquica de supervisão em campo, do nível mais operacional ao mais alto:',opts:['Recenseador → ACS → ACR','ACR → ACS → Recenseador','ACS → Recenseador → ACR','Recenseador → ACR → ACS'],a:0,exp:'O Recenseador é supervisionado pelo ACS, que por sua vez tem seu trabalho gerenciado pelo ACR.'},
+{topic:'t1',disc:'tecnico',q:'O Agente Censitário de Informática (ACI), no posto censitário, tem como função principal:',opts:['Treinar Recenseadores em técnicas de entrevista','Prestar apoio de tecnologia da informação ao AOR','Coordenar o Centro Estadual de Qualidade','Aplicar questionários em campo'],a:1,exp:'O ACI presta apoio relativo a questões de TI ao Assistente Operacional Regional (AOR).'},
+{topic:'t1',disc:'tecnico',q:'Aproximadamente quantos profissionais temporários serão contratados para o 12º Censo Agropecuário?',opts:['Cerca de 5 mil','Cerca de 36 mil','Cerca de 100 mil','Cerca de 1 milhão'],a:1,exp:'Serão contratados cerca de 36 mil profissionais temporários por processos seletivos simplificados.'},
+// t2
+{topic:'t2',disc:'tecnico',q:'O que caracteriza uma "pesquisa censitária" como o Censo Agropecuário?',opts:['Coleta de dados de uma amostra representativa da população','Coleta de dados de todo o universo investigado','Coleta de dados apenas nos grandes produtores','Coleta de dados exclusivamente por meio digital, sem visita presencial'],a:1,exp:'Uma pesquisa censitária investiga a totalidade do universo — no caso, todos os estabelecimentos agropecuários do país.'},
+{topic:'t2',disc:'tecnico',q:'Qual é a unidade de investigação do Censo Agropecuário, Florestal e Aquícola?',opts:['O município','O produtor rural, individualmente','O estabelecimento agropecuário','O domicílio rural'],a:2,exp:'A unidade de investigação é o estabelecimento agropecuário, independentemente de tamanho, forma jurídica ou localização.'},
+{topic:'t2',disc:'tecnico',q:'O 12º Censo Agropecuário terá sua coleta realizada em qual ano, com dados referentes a qual período?',opts:['Coleta em 2026, referência 2025','Coleta em 2027, referência 2026','Coleta em 2025, referência 2024','Coleta em 2028, referência 2027'],a:1,exp:'A coleta ocorrerá em 2027, tendo como referência os dados do ano de 2026.'},
+{topic:'t2',disc:'tecnico',q:'O dispositivo utilizado pelo Recenseador para registrar e armazenar as informações coletadas em campo é chamado de:',opts:['Mapa Municipal Estatístico','Descritivo do Setor','Dispositivo Móvel de Coleta (DMC)','Cadastro Nacional de Endereços (CNEFE)'],a:2,exp:'O DMC é o tablet utilizado para registro e armazenamento das informações coletadas em campo.'},
+{topic:'t2',disc:'tecnico',q:'"Data de referência" e "período de referência" se diferenciam porque:',opts:['São sinônimos e podem ser usados indistintamente','A data de referência é um intervalo; o período, um instante','A data de referência é um instante específico; o período é um intervalo de tempo','Ambos se referem sempre a um mês, nunca a um ano'],a:2,exp:'Data de referência indica um momento específico; período de referência corresponde ao intervalo de tempo considerado (geralmente o ano civil).'},
+{topic:'t2',disc:'tecnico',q:'Aproximadamente quantos estabelecimentos agropecuários o 12º Censo pretende cadastrar e investigar no Brasil?',opts:['500 mil','1,2 milhão','5,1 milhões','20 milhões'],a:2,exp:'A estimativa é de cerca de 5,1 milhões de estabelecimentos agropecuários no país.'},
+{topic:'t2',disc:'tecnico',q:'Além do DMC, quais recursos auxiliam o Recenseador na localização em campo durante a coleta?',opts:['Apenas bússola e trena','Mapas digitais e imagens de satélite','Somente entrevistas com moradores locais','Apenas o Manual do Recenseador impresso'],a:1,exp:'O DMC é integrado a mapas digitais e imagens de satélite que auxiliam o percurso e a localização em campo.'},
+{topic:'t2',disc:'tecnico',q:'O Censo Agropecuário, Florestal e Aquícola tem como principal objetivo:',opts:['Levantar apenas dados de renda dos produtores rurais','Levantar informações sobre todos os estabelecimentos agropecuários do território nacional','Substituir o Censo Demográfico do IBGE','Avaliar exclusivamente a produção de grandes empresas agrícolas'],a:1,exp:'O objetivo central é levantar informações sobre todos os estabelecimentos agropecuários situados no território nacional.'},
+// t3
+{topic:'t3',disc:'tecnico',q:'Uma propriedade rural onde o morador cria algumas galinhas e mantém uma horta apenas para consumo próprio de lazer, sem qualquer finalidade comercial ou de subsistência real, deve ser:',opts:['Recenseada como estabelecimento agropecuário de subsistência','Recenseada apenas parcialmente, somente quanto às aves','Considerada não recenseável, pois não há unidade de exploração agropecuária','Recenseada apenas se o morador autorizar'],a:2,exp:'Quando a produção existe apenas para lazer ou passatempo dos moradores, sem finalidade comercial nem de subsistência, não há unidade recenseável.'},
+{topic:'t3',disc:'tecnico',q:'Um apicultor que instala colmeias em uma área de mata pertencente a terceiros, sem possuir área própria, é classificado como:',opts:['Estabelecimento não recenseável','Produtor sem área','Unidade domiciliar','Situação de litígio'],a:1,exp:'Trata-se de um produtor sem área — situação em que o produtor não precisa de área própria para desenvolver a atividade, mas ainda assim deve ser recenseado.'},
+{topic:'t3',disc:'tecnico',q:'Quando a área de um estabelecimento agropecuário se estende por mais de um setor censitário, ele deve ser recenseado:',opts:['No setor onde estiver localizada a Sede do estabelecimento','No setor de maior extensão territorial, sempre','Em todos os setores, com um questionário para cada um','No setor definido pelo produtor, à sua escolha'],a:0,exp:'O estabelecimento é recenseado no setor onde estiver localizada sua Sede; na ausência dela, no setor com a maior parte das terras.'},
+{topic:'t3',disc:'tecnico',q:'Para que áreas não contínuas sejam consideradas um único estabelecimento agropecuário, é necessário que, simultaneamente:',opts:['Estejam no mesmo estado, ainda que em municípios diferentes','Estejam no mesmo município, com os mesmos recursos técnicos e humanos e uma única administração','Pertençam ao mesmo produtor, independentemente de outros critérios','Tenham a mesma extensão em hectares'],a:1,exp:'As quatro condições exigidas são: mesmo município, mesmos recursos técnicos, mesmo pessoal e mesma administração.'},
+{topic:'t3',disc:'tecnico',q:'Um estabelecimento agropecuário em processo de partilha entre herdeiros, havendo consenso entre eles, deve ser recenseado como:',opts:['Um estabelecimento diferente para cada herdeiro','Um único estabelecimento, com informações prestadas pelo inventariante ou responsável','Não recenseável até a resolução judicial da partilha','Estabelecimento apenas se houver produção comercial'],a:1,exp:'Havendo consenso entre os herdeiros, o estabelecimento é recenseado como único, cabendo ao inventariante ou representante legal prestar as informações.'},
+{topic:'t3',disc:'tecnico',q:'Em uma área de exploração comunitária onde cada família decide individualmente o que produzir e o destino de sua produção, a coleta deve ser feita:',opts:['Com um único questionário para toda a comunidade','Com um questionário para cada família, de forma individualizada','Sem aplicação de questionário, pois não há estabelecimento recenseável','Apenas para a família com maior produção'],a:1,exp:'Quando a produção é individual, deve-se preencher um questionário para cada família separadamente.'},
+{topic:'t3',disc:'tecnico',q:'Um estabelecimento novo, ainda sem produção no período de referência por ter iniciado a exploração recentemente, deve:',opts:['Ser recenseado normalmente, mesmo sem produção no período','Ser excluído do Censo até apresentar produção','Ser recenseado apenas na próxima edição do Censo','Ser registrado apenas se tiver lavoura permanente já em produção'],a:0,exp:'Estabelecimentos existentes na data de referência devem ser recenseados mesmo sem produção no período, registrando o motivo em observações.'},
+{topic:'t3',disc:'tecnico',q:'Um estabelecimento especializado em confinamento de gado (boitel) só é considerado estabelecimento agropecuário quando:',opts:['Possuir animais próprios ou desenvolver outra atividade agropecuária','Receber qualquer quantidade de animais de terceiros para engorda','Estiver localizado em área urbana','For administrado por uma cooperativa'],a:0,exp:'Animais de terceiros são contados nos estabelecimentos dos respectivos proprietários; o boitel só é estabelecimento se tiver animais próprios ou outra atividade agropecuária.'},
+// t4
+{topic:'t4',disc:'tecnico',q:'O que é o setor censitário, para fins do Censo Agropecuário?',opts:['A menor unidade territorial definida pelo IBGE para a coleta de dados','Uma divisão exclusiva das áreas urbanas do país','Sinônimo de município, para fins estatísticos','Uma unidade usada apenas para pesquisas industriais'],a:0,exp:'O setor censitário é a menor área geográfica definida pelo IBGE, constituindo a unidade territorial de coleta.'},
+{topic:'t4',disc:'tecnico',q:'O geocódigo de um setor censitário reúne informações de:',opts:['Apenas o nome do produtor rural responsável','Unidade da Federação, município, distrito, subdistrito e número do setor','Somente a latitude e a longitude do setor','O tipo de solo predominante na área'],a:1,exp:'O geocódigo identifica de forma única o setor, reunindo UF, município, distrito, subdistrito e número.'},
+{topic:'t4',disc:'tecnico',q:'Um setor censitário composto por 15 ou mais indivíduos autodeclarados quilombolas, residentes em moradias contíguas com vínculos familiares ou comunitários, é classificado como:',opts:['Agrovila','Agrupamento Quilombola','Núcleo urbano','Aglomerado rural'],a:1,exp:'Essa é exatamente a definição de Agrupamento Quilombola no material do IBGE.'},
+{topic:'t4',disc:'tecnico',q:'Para ser classificado como setor do tipo "Quartel e Base Militar", a instalação deve possuir, no mínimo:',opts:['15 habitantes permanentes há mais de um ano','30 habitantes permanentes há mais de um ano','50 habitantes permanentes há mais de um ano','100 habitantes permanentes há mais de um ano'],a:2,exp:'A regra geral para a maioria dos tipos especiais (quartel, unidade prisional, agrovila etc.) é de 50 habitantes permanentes há mais de um ano.'},
+{topic:'t4',disc:'tecnico',q:'Sobre o pertencimento a Povos e Comunidades Tradicionais (PCTs), é correto afirmar que:',opts:['É definido exclusivamente pelo Recenseador, com base na aparência do entrevistado','É autodeclaratório, devendo ser registrado conforme a declaração do próprio informante','Só pode ser registrado mediante documento oficial de identidade étnica','Nunca pode ser atribuído a mais de uma comunidade pela mesma pessoa'],a:1,exp:'O pertencimento étnico é autodeclaratório: deve ser registrado com base na declaração do informante, sem questionamentos ou correções.'},
+{topic:'t4',disc:'tecnico',q:'A Área de Interesse Operacional (AIO) de Povos e Comunidades Tradicionais se caracteriza por:',opts:['Seguir exatamente a mesma delimitação dos setores censitários','Não seguir a setorização do IBGE, podendo ser menor ou maior que um setor','Existir apenas em áreas urbanas de alta densidade','Ser definida exclusivamente pelo produtor rural'],a:1,exp:'As AIOs não seguem a setorização proposta pelo IBGE, podendo inclusive cobrir um município inteiro.'},
+{topic:'t4',disc:'tecnico',q:'Um setor com mais de 50 domicílios associados a um Projeto de Assentamento, caracterizado por concentração de domicílios de famílias assentadas, é classificado como:',opts:['Agrovila','Aglomerado rural comum','Alojamento/Acampamento','Núcleo urbano'],a:0,exp:'Essa é a definição de Agrovila: setor censitário com mais de 50 domicílios associados a Projetos de Assentamento.'},
+{topic:'t4',disc:'tecnico',q:'Setores classificados como "massa d\'água" se referem a:',opts:['Áreas urbanas sujeitas a alagamento sazonal','Grandes porções de água interiores ou costeiras, que não são áreas de coleta','Setores rurais próximos a rios, sempre recenseáveis','Setores exclusivos de comunidades de pescadores'],a:1,exp:'São grandes porções de água que, embora não sejam áreas de coleta, podem interferir na operação censitária.'},
+// t5
+{topic:'t5',disc:'tecnico',q:'Em um mapa na escala 1:50.000, uma distância de 3 cm no mapa corresponde, na realidade, a:',opts:['300 metros','1.500 metros','3.000 metros','15.000 metros'],a:1,exp:'3 cm × 50.000 = 150.000 cm = 1.500 metros (1,5 km).'},
+{topic:'t5',disc:'tecnico',q:'Quantas partes compõem o Descritivo do Setor Censitário, segundo o material do IBGE?',opts:['Três','Quatro','Cinco','Seis'],a:2,exp:'O descritivo tem cinco partes: ponto inicial/final; descrição do perímetro; setores a excluir; estruturas territoriais não setorizadas; acessibilidade e observações.'},
+{topic:'t5',disc:'tecnico',q:'No padrão de endereçamento do CNEFE utilizado pelo IBGE, o "ponto de referência" é obrigatório quando:',opts:['O endereço possui número e complemento bem definidos','O logradouro tem nome oficial reconhecido pela prefeitura','O endereço não possui número ou complemento que permita sua localização','O setor censitário for do tipo urbano de alta densidade'],a:2,exp:'O ponto de referência é obrigatório quando o endereço não tem número nem complemento suficientes para sua localização, comum em áreas rurais.'},
+{topic:'t5',disc:'tecnico',q:'Em uma coordenada geográfica com latitude -22,326 e longitude -42,669, o ponto está localizado:',opts:['Ao norte do Equador e a leste de Greenwich','Ao sul do Equador e a oeste de Greenwich','Ao norte do Equador e a oeste de Greenwich','Ao sul do Equador e a leste de Greenwich'],a:1,exp:'Latitude negativa indica posição ao sul do Equador; longitude negativa indica posição a oeste do Meridiano de Greenwich.'},
+{topic:'t5',disc:'tecnico',q:'A latitude de um ponto da superfície terrestre varia dentro de qual intervalo?',opts:['0° a 90°, Norte ou Sul','0° a 180°, Norte ou Sul','0° a 90°, Leste ou Oeste','0° a 360°, em qualquer direção'],a:0,exp:'A latitude é o afastamento em relação à Linha do Equador, variando de 0° a 90°, podendo ser Norte ou Sul.'},
+{topic:'t5',disc:'tecnico',q:'A imagem de satélite, no mapa digital do setor, ajuda o Recenseador a identificar, entre outros elementos, pastagens, que costumam aparecer em quais tons?',opts:['Tons de azul','Tons de verde','Tons de vermelho','Tons de cinza'],a:1,exp:'Pastagens costumam aparecer em tons de verde nas imagens de satélite, enquanto telhados aparecem em vermelho, laranja, cinza ou branco.'},
+{topic:'t5',disc:'tecnico',q:'O local ideal para a captura da coordenada geográfica de um estabelecimento agropecuário, quando há uma edificação-sede, é:',opts:['No centro geométrico de toda a área do estabelecimento','Na entrada da edificação que representa a sede do estabelecimento','No ponto mais alto do terreno','Em qualquer ponto dentro do perímetro do setor'],a:1,exp:'O local ideal de captura é na entrada da edificação que representa a sede do estabelecimento, quando existir.'},
+{topic:'t5',disc:'tecnico',q:'Ao interpretar um mapa em campo, o Recenseador deve, antes de tudo:',opts:['Confiar exclusivamente no GPS do DMC, ignorando o mapa em papel','Consultar a legenda antes de interpretar qualquer símbolo do mapa','Ignorar a escala, pois ela só importa em áreas urbanas','Alterar o perímetro do setor sempre que achar mais prático'],a:1,exp:'Nunca se deve interpretar um símbolo do mapa sem antes consultar a legenda; e o Recenseador não pode alterar o perímetro do setor.'},
+// t6 portugues
+{topic:'t6a',disc:'portugues',q:'"O trabalho do recenseador exige atenção aos detalhes e disposição para percorrer longas distâncias, muitas vezes em condições adversas de acesso." De acordo com o trecho, o trabalho de campo do recenseador é marcado principalmente por:',opts:['Facilidade de acesso e ausência de desafios','Atenção a detalhes e enfrentamento de dificuldades de deslocamento','Trabalho exclusivamente administrativo, sem deslocamentos','Rotina sem qualquer exigência técnica'],a:1,exp:'O trecho aponta exatamente essas duas características: atenção aos detalhes e disposição para enfrentar longas distâncias em condições adversas.'},
+{topic:'t6b',disc:'portugues',q:'Assinale a alternativa em que o uso do acento indicativo de crase está correto:',opts:['O recenseador se dirigiu à sede do posto censitário.','O treinamento começa à partir de segunda-feira.','Ele foi à pé até o próximo estabelecimento.','Entregou o relatório à ele antes do prazo.'],a:0,exp:'Há crase antes de palavra feminina que aceita o artigo "a" ("a sede"); as demais alternativas usam a crase de forma incorreta (antes de verbo, advérbio ou pronome).'},
+{topic:'t6b',disc:'portugues',q:'Assinale a alternativa com concordância verbal correta:',opts:['Fazem dois anos que iniciei o treinamento censitário.','Faz dois anos que iniciei o treinamento censitário.','Fazem dois anos que iniciamos os treinamentos.','Houveram muitos treinamentos naquele ano.'],a:1,exp:'O verbo "fazer" indicando tempo decorrido é impessoal e fica sempre na 3ª pessoa do singular: "faz dois anos".'},
+{topic:'t6b',disc:'portugues',q:'Assinale a alternativa em que a regência verbal está de acordo com a norma-padrão:',opts:['Os candidatos assistiram à palestra sobre o Censo Agropecuário.','Os candidatos assistiram a palestra sobre o Censo Agropecuário, sem qualquer preposição.','Os candidatos assistiram na palestra sobre o Censo Agropecuário.','Os candidatos assistiram sobre a palestra do Censo Agropecuário.'],a:0,exp:'No sentido de "ver", o verbo "assistir" exige a preposição "a", podendo haver crase diante de palavra feminina: "assistiram à palestra".'},
+{topic:'t6b',disc:'portugues',q:'Assinale a alternativa com a grafia correta da palavra:',opts:['Beneficiente','Benefecente','Beneficente','Beneficiente'],a:2,exp:'A forma correta é "beneficente" (relativo a benefício), e não "beneficiente".'},
+{topic:'t6b',disc:'portugues',q:'"O Recenseador percorreu toda a área do setor; ___, encontrou dificuldade para localizar um dos endereços." Assinale o conectivo que expressa ideia de oposição, completando corretamente a frase:',opts:['portanto','contudo','além disso','ou seja'],a:1,exp:'"Contudo" é conectivo de oposição/contraste, adequado para introduzir uma dificuldade após uma ação bem-sucedida.'},
+{topic:'t6b',disc:'portugues',q:'Em "O supervisor orientou os recenseadores para que revisassem os questionários", a oração destacada expressa ideia de:',opts:['Causa','Finalidade','Concessão','Condição'],a:1,exp:'A oração "para que revisassem os questionários" expressa finalidade, respondendo à pergunta "com que objetivo?".'},
+{topic:'t6b',disc:'portugues',q:'Assinale a alternativa em que todas as palavras estão corretamente acentuadas segundo a norma-padrão:',opts:['Área, geográfico, dispositivo, específico','Área, geografico, dispositivo, especifico','Area, geográfico, dispositivo, específico','Área, geográfico, disposítivo, específico'],a:0,exp:'Todas as palavras da alternativa correta seguem as regras de acentuação: "área" (hiato), "geográfico" e "específico" (proparoxítonas), "dispositivo" (paroxítona sem acento por não se enquadrar nas regras de acentuação obrigatória).'},
+// t7 geografia
+{topic:'t7a',disc:'geografia',q:'Quantos municípios compõem atualmente a divisão político-administrativa do Brasil?',opts:['4.570','5.569','6.200','3.980'],a:1,exp:'O Brasil possui 5.569 municípios, que dividem integralmente os estados.'},
+{topic:'t7a',disc:'geografia',q:'Quantas Unidades da Federação (UFs) existem no Brasil, somando estados e Distrito Federal?',opts:['26','27','24','30'],a:1,exp:'São 27 UFs: 26 estados mais o Distrito Federal.'},
+{topic:'t7a',disc:'geografia',q:'Sobre o Distrito Federal, é correto afirmar que:',opts:['É um município como qualquer outro','É uma Unidade da Federação onde se localiza a sede do Governo Federal, distinta de um estado','É um distrito subordinado ao estado de Goiás','É um subdistrito de Brasília'],a:1,exp:'O Distrito Federal é a Unidade da Federação brasileira onde se localiza a sede do Governo Federal, com estatuto distinto do de um estado.'},
+{topic:'t7a',disc:'geografia',q:'Qual unidade territorial divide integralmente os municípios em áreas menores, sem possuir autonomia administrativa própria?',opts:['Subdistrito','Distrito','Setor censitário','Unidade da Federação'],a:1,exp:'O distrito divide o município, sendo subordinado ao governo municipal, sem autonomia administrativa própria.'},
+{topic:'t7a',disc:'geografia',q:'Sobre os subdistritos no Brasil, é correto afirmar que:',opts:['Existem em todos os municípios brasileiros','Existem apenas em grandes cidades, e a maioria dos municípios não os possui','São a menor unidade territorial usada pelo IBGE para coleta','Substituíram os distritos em todo o país'],a:1,exp:'Os subdistritos, cerca de 645 no país, existem geralmente apenas em grandes cidades; a maior parte dos municípios não os possui.'},
+{topic:'t7a',disc:'geografia',q:'A maior parte da população brasileira está concentrada em áreas:',opts:['Rurais','Urbanas','Exclusivamente litorâneas','Exclusivamente na Região Centro-Oeste'],a:1,exp:'O Brasil é um país predominantemente urbano, com a maior parte da população vivendo em cidades.'},
+{topic:'t7c',disc:'geografia',q:'Qual bioma predomina na Região Norte do Brasil, sendo relevante para a atividade de exploração florestal investigada pelo Censo Agropecuário?',opts:['Cerrado','Caatinga','Amazônia','Pampa'],a:2,exp:'A Amazônia é o bioma predominante na Região Norte do país.'},
+{topic:'t7b',disc:'geografia',q:'Na leitura de um mapa, o elemento que apresenta os símbolos e cores utilizados para representar estradas, rios e construções é:',opts:['A escala','A legenda','O geocódigo','O descritivo do setor'],a:1,exp:'A legenda apresenta os símbolos e referências que permitem identificar os elementos representados no mapa.'},
+// t8 rlq
+{topic:'t8a',disc:'rlq',q:'Se 5 recenseadores visitam 40 estabelecimentos em um dia, mantendo o mesmo ritmo de trabalho, quantos estabelecimentos 8 recenseadores visitariam no mesmo período?',opts:['56','60','64','72'],a:2,exp:'Cada recenseador visita 40÷5 = 8 estabelecimentos por dia; 8 recenseadores visitariam 8×8 = 64 estabelecimentos.'},
+{topic:'t8a',disc:'rlq',q:'Uma prova tem 60 questões, e a aprovação exige, no mínimo, 30% de acertos no total. Quantas questões corretas isso representa?',opts:['15','18','20','24'],a:1,exp:'30% de 60 = (30×60)/100 = 18 questões.'},
+{topic:'t8b',disc:'rlq',q:'Observe a sequência: 2, 5, 10, 17, 26, ... Qual é o próximo termo?',opts:['35','36','37','39'],a:2,exp:'As diferenças entre os termos são 3, 5, 7, 9, 11 (números ímpares crescentes); logo, 26 + 11 = 37.'},
+{topic:'t8c',disc:'rlq',q:'Uma urna contém 4 bolas vermelhas e 6 bolas azuis. Ao retirar uma bola ao acaso, qual a probabilidade de ela ser azul?',opts:['40%','50%','60%','70%'],a:2,exp:'Há 10 bolas no total; 6 são azuis, logo a probabilidade é 6/10 = 60%.'},
+{topic:'t8c',disc:'rlq',q:'Um mapa está na escala 1:25.000. Qual a distância real, em metros, correspondente a 4 cm no mapa?',opts:['250 m','500 m','1.000 m','2.500 m'],a:2,exp:'4 cm × 25.000 = 100.000 cm; dividindo por 100, obtém-se 1.000 metros.'},
+{topic:'t8b',disc:'rlq',q:'Considere a afirmação: "Todo recenseador é treinado" e o fato de que "João é recenseador". Pode-se concluir corretamente que:',opts:['João é treinado','Todo treinado é recenseador','João não é treinado','Nada se pode concluir sobre João'],a:0,exp:'Se todo recenseador é treinado e João é recenseador, então, por dedução direta, João é treinado.'},
+{topic:'t8a',disc:'rlq',q:'Um candidato acertou 42 de 60 questões em um simulado. Qual foi seu percentual de aproveitamento?',opts:['60%','65%','70%','75%'],a:2,exp:'42 ÷ 60 = 0,70, ou seja, 70% de aproveitamento.'},
+{topic:'t8b',disc:'rlq',q:'Observe a sequência: 3, 6, 12, 24, ... Qual é o próximo termo?',opts:['36','42','48','50'],a:2,exp:'Cada termo é o dobro do anterior (razão 2); logo, 24 × 2 = 48.'},
+// extras tecnico
+{topic:'t3',disc:'tecnico',q:'Quando um estabelecimento agropecuário está em litígio (disputa judicial), ele deve ser recenseado considerando como produtor:',opts:['O herdeiro mais velho da família','A pessoa que, na data de referência, era responsável economicamente pela exploração','Exclusivamente o inventariante nomeado','Nenhum produtor, até que a Justiça decida o caso'],a:1,exp:'Em caso de disputa judicial, considera-se produtor quem era responsável economicamente pela exploração na data de referência.'},
+{topic:'t2',disc:'tecnico',q:'Observando o histórico das últimas edições (1996, 2007, 2017), o Censo Agropecuário passou a ser realizado, desde então, a cada aproximadamente:',opts:['5 anos','10 anos','15 anos','20 anos'],a:1,exp:'Desde 1996, os Censos Agropecuários seguiram um intervalo de aproximadamente dez anos entre uma edição e outra (1996, 2007, 2017, 2027).'},
+{topic:'t4',disc:'tecnico',q:'Unidades de Conservação, Terras Indígenas e Territórios Quilombolas oficialmente delimitados são exemplos de:',opts:['Recortes territoriais de Povos e Comunidades Tradicionais (PCTs) reconhecidos oficialmente pelo Estado','Tipos de setores exclusivamente urbanos','Unidades administrativas equivalentes a municípios','Categorias de estabelecimento agropecuário'],a:0,exp:'São áreas classificadas como territórios oficialmente reconhecidos pelo Estado Brasileiro, uma das três categorias de áreas de PCTs.'},
+{topic:'t5',disc:'tecnico',q:'O Mapa Municipal Estatístico (MME), fixado no posto de coleta, tem como função principal:',opts:['Mostrar a visão geral de todos os setores censitários do município e suas vias de acesso','Substituir totalmente o descritivo do setor','Indicar apenas os limites estaduais do país','Ser utilizado exclusivamente pela coordenação nacional, sem acesso do Recenseador'],a:0,exp:'O MME apresenta a visão geral de todos os setores censitários do município, ajudando o Recenseador a planejar a chegada ao seu setor.'},
+// portugues extras
+{topic:'t6b',disc:'portugues',q:'Assinale a alternativa com concordância nominal correta:',opts:['Segue anexo as fotocópias solicitadas.','Seguem anexas as fotocópias solicitadas.','Segue anexos as fotocópias solicitadas.','Seguem anexo as fotocópias solicitadas.'],a:1,exp:'"Anexo" funciona como adjetivo e deve concordar em gênero e número com o substantivo a que se refere: "fotocópias" (feminino plural) exige "anexas".'},
+{topic:'t6b',disc:'portugues',q:'Assinale a alternativa com o emprego correto da grafia de "por que":',opts:['Não sei por que ele faltou ao treinamento.','Não sei porque ele faltou ao treinamento.','Não sei porquê ele faltou ao treinamento.','Não sei por quê ele faltou ao treinamento.'],a:0,exp:'Em pergunta indireta (sem ponto de interrogação), usa-se "por que" separado e sem acento.'},
+{topic:'t6b',disc:'portugues',q:'A oração "Os questionários foram preenchidos pelos recenseadores" está na voz:',opts:['Ativa','Passiva analítica','Passiva sintética','Reflexiva'],a:1,exp:'A voz passiva analítica é formada por verbo auxiliar ("foram") + particípio ("preenchidos"), com o agente da passiva introduzido por "pelos".'},
+{topic:'t6a',disc:'portugues',q:'"Estudar um único tema por muitas horas seguidas não garante boa retenção. Especialistas recomendam retomar o mesmo assunto em intervalos crescentes de dias, reforçando as conexões que sustentam a lembrança." De acordo com o trecho, a retenção de conteúdo é favorecida principalmente por:',opts:['Estudar um único tema por longos períodos contínuos','Revisar o mesmo assunto em intervalos espaçados ao longo do tempo','Memorizar sem qualquer tipo de revisão','Evitar completamente o estudo teórico'],a:1,exp:'O trecho defende exatamente a revisão espaçada, feita em intervalos crescentes de dias, como forma de reforçar a memorização.'},
+{topic:'t6b',disc:'portugues',q:'Assinale a alternativa com pontuação correta quanto ao uso de vírgulas em aposto:',opts:['O IBGE, órgão responsável pelo censo, atua há mais de 80 anos.','O IBGE órgão responsável pelo censo, atua há mais de 80 anos.','O IBGE, órgão responsável pelo censo atua há mais de 80 anos.','O IBGE órgão, responsável pelo censo atua, há mais de 80 anos.'],a:0,exp:'O aposto explicativo "órgão responsável pelo censo" deve vir isolado por vírgulas dos dois lados.'},
+{topic:'t6b',disc:'portugues',q:'Na frase "O recenseador que chegou primeiro venceu o desafio", o termo destacado exerce a função de:',opts:['Sujeito da oração adjetiva','Objeto direto','Predicativo do sujeito','Aposto'],a:0,exp:'"Que" retoma "o recenseador" e funciona como sujeito da oração adjetiva "que chegou primeiro".'},
+{topic:'t6b',disc:'portugues',q:'Assinale a alternativa com o emprego correto de "onde":',opts:['O setor aonde o recenseador trabalha fica na zona rural.','O setor onde o recenseador trabalha fica na zona rural.','Aonde fica o setor em que ele mora?','Onde ele vai depois do treinamento?'],a:1,exp:'"Onde" indica permanência (o recenseador trabalha "em" um lugar); "aonde" é usado com ideia de movimento, como em verbos como "ir" ou "chegar".'},
+{topic:'t6b',disc:'portugues',q:'Assinale a alternativa com o emprego correto de "mal" ou "mau":',opts:['Ele se sentiu mal durante o treinamento.','O relatório ficou mau redigido.','Foi um mal aluno durante o curso.','O clima estava mal para a coleta em campo.'],a:0,exp:'"Mal" é advérbio (oposto de "bem") e modifica o verbo "sentiu"; nas demais alternativas, o correto seria o adjetivo "mau" (oposto de "bom").'},
+{topic:'t6b',disc:'portugues',q:'Assinale a alternativa com colocação pronominal adequada à norma-padrão, considerando que a frase não deve iniciar com pronome oblíquo átono:',opts:['Me disseram que a prova será em agosto.','Disseram-me que a prova será em agosto.','Disseram me que a prova será em agosto.','Me-disseram que a prova será em agosto.'],a:1,exp:'A norma-padrão evita iniciar frases com pronome oblíquo átono; o correto é utilizar a ênclise: "Disseram-me".'},
+{topic:'t6b',disc:'portugues',q:'Assinale a alternativa com o emprego correto do verbo "haver" indicando existência:',opts:['Haviam muitos candidatos na sala de prova.','Havia muitos candidatos na sala de prova.','Houveram muitos candidatos aprovados.','Vão haver muitos candidatos na próxima edição.'],a:1,exp:'O verbo "haver" no sentido de "existir" é impessoal e permanece sempre na 3ª pessoa do singular: "havia", nunca "haviam".'},
+// mais interpretação (t6a)
+{topic:'t6a',disc:'portugues',q:'"Antes de iniciar a coleta em um novo setor, o Recenseador deve consultar o mapa e o descritivo, identificando os limites da área sob sua responsabilidade. Pular essa etapa pode fazer com que ele invada, por engano, um setor vizinho." De acordo com o texto, consultar o mapa e o descritivo antes da coleta serve principalmente para:',opts:['Acelerar o preenchimento do questionário','Evitar que o Recenseador invada, por engano, a área de outro setor','Substituir a necessidade de treinamento prévio','Garantir que o produtor rural assine o questionário'],a:1,exp:'O texto afirma diretamente que pular essa etapa "pode fazer com que ele invada, por engano, um setor vizinho" — logo, essa é a função de consultar mapa e descritivo.'},
+{topic:'t6a',disc:'portugues',q:'"A revisão constante do trabalho em campo permite identificar erros logo no início da coleta, evitando que o mesmo problema se repita em centenas de questionários ao longo dos dias seguintes." Segundo o texto, revisar o trabalho desde o início da coleta é importante porque:',opts:['Torna a coleta mais lenta e burocrática','Evita que um erro se repita em muitos questionários posteriores','Elimina totalmente a necessidade do Agente Censitário de Qualidade','É uma exigência aplicável apenas a Recenseadores novatos'],a:1,exp:'O texto afirma que a revisão constante evita que "o mesmo problema se repita em centenas de questionários ao longo dos dias seguintes".'},
+{topic:'t6a',disc:'portugues',q:'"Organizar um cronograma de estudos que alterne diferentes disciplinas ao longo da semana costuma trazer melhores resultados do que se dedicar dias inteiros a uma única matéria, pois mantém o cérebro mais ativo diante de conteúdos variados." O texto defende que alternar disciplinas durante os estudos é vantajoso porque:',opts:['Reduz o tempo total de estudo necessário','Mantém a atenção mais ativa diante da variedade de conteúdos','Elimina a necessidade de qualquer revisão posterior','É a única forma possível de aprender um conteúdo'],a:1,exp:'O texto afirma que alternar disciplinas "mantém o cérebro mais ativo diante de conteúdos variados", sendo essa a vantagem apontada.'},
+{topic:'t6a',disc:'portugues',q:'"Ao abordar um produtor rural, o Recenseador deve se identificar, apresentar o documento oficial do IBGE e explicar, de forma clara, o objetivo da visita, reforçando o caráter sigiloso das informações prestadas." De acordo com o texto, ao chegar a um estabelecimento, o Recenseador deve, entre outras coisas:',opts:['Solicitar documentos bancários do produtor rural','Explicar o objetivo da visita e reforçar o sigilo das informações','Evitar se identificar, para não influenciar as respostas','Aplicar o questionário sem qualquer explicação prévia'],a:1,exp:'O texto afirma explicitamente que o Recenseador deve "explicar, de forma clara, o objetivo da visita, reforçando o caráter sigiloso das informações prestadas".'},
+// geografia extras
+{topic:'t7b',disc:'geografia',q:'A escala de um mapa indica:',opts:['A proporção entre a distância representada no mapa e a distância real no terreno','O tamanho físico do papel do mapa','O ano em que o mapa foi produzido','Apenas a orientação norte-sul do mapa'],a:0,exp:'A escala expressa a relação de proporção entre a distância no mapa e a distância real no terreno.'},
+{topic:'t7b',disc:'geografia',q:'Em um mapa topográfico, as curvas de nível representam:',opts:['Pontos de mesma altitude','Limites municipais','Tipos de solo predominante','Densidade populacional da área'],a:0,exp:'Curvas de nível conectam pontos de mesma altitude, permitindo representar o relevo em um mapa.'},
+{topic:'t7b',disc:'geografia',q:'Quantos fusos horários oficiais o Brasil possui atualmente, segundo a legislação em vigor?',opts:['2','3','4','5'],a:2,exp:'O Brasil possui oficialmente 4 fusos horários, ainda que a maior parte do território utilize o horário de Brasília (UTC-3).'},
+{topic:'t7c',disc:'geografia',q:'O bioma predominante nas regiões Centro-Oeste e em parte do Sudeste do Brasil, marcado por vegetação de savana, é:',opts:['Cerrado','Mata Atlântica','Pampa','Pantanal'],a:0,exp:'O Cerrado é o bioma predominante no Centro-Oeste e parte do Sudeste, caracterizado por vegetação típica de savana.'},
+{topic:'t7a',disc:'geografia',q:'O território brasileiro é dividido oficialmente pelo IBGE em quantas grandes regiões?',opts:['4','5','6','7'],a:1,exp:'O Brasil é dividido em 5 grandes regiões: Norte, Nordeste, Centro-Oeste, Sudeste e Sul.'},
+{topic:'t7a',disc:'geografia',q:'De acordo com os critérios do IBGE, um aglomerado rural se caracteriza por reunir domicílios:',opts:['Distantes entre si por mais de 1 km, sem qualquer proximidade','Próximos entre si, normalmente a não mais de 50 m de distância, e separados da franja urbana por mais de 1 km','Localizados exclusivamente em áreas urbanas','Sem qualquer critério de distância definido'],a:1,exp:'O aglomerado rural caracteriza-se pelo caráter aglomerado de domicílios, normalmente a não mais de 50 m entre si, separados da franja das cidades por mais de 1 km.'},
+{topic:'t7c',disc:'geografia',q:'O relevo predominante no território brasileiro é caracterizado principalmente por:',opts:['Planaltos e depressões, com baixa proporção de montanhas muito altas','Grandes cadeias de montanhas com picos superiores a 6.000 m','Desertos extensos ao longo de todo o território','Predominância de planícies abaixo do nível do mar'],a:0,exp:'O relevo brasileiro é majoritariamente formado por planaltos e depressões, sem grandes cadeias montanhosas como a Cordilheira dos Andes.'},
+{topic:'t7c',disc:'geografia',q:'A maior bacia hidrográfica do Brasil, e também do mundo em volume de água, é a bacia:',opts:['Amazônica','do Paraná','do São Francisco','do Prata'],a:0,exp:'A Bacia Amazônica é a maior do mundo em volume de água, cobrindo grande parte do território brasileiro.'},
+{topic:'t7a',disc:'geografia',q:'Assinale a alternativa que apresenta corretamente a hierarquia territorial brasileira, da maior para a menor unidade:',opts:['Unidade da Federação > Município > Distrito > Subdistrito','Distrito > Município > UF > Subdistrito','Subdistrito > Distrito > Município > UF','Município > UF > Distrito > Subdistrito'],a:0,exp:'A hierarquia correta, da maior para a menor unidade, é: Unidade da Federação, Município, Distrito e Subdistrito.'},
+{topic:'t7b',disc:'geografia',q:'Em uma imagem de satélite, uma área revestida por pastagem tende a aparecer, predominantemente, em qual tonalidade?',opts:['Tons de verde','Tons de azul','Tons de vermelho intenso','Tons de branco'],a:0,exp:'Pastagens costumam aparecer em tons de verde nas imagens de satélite, o que ajuda o Recenseador a reconhecer o uso da terra em campo.'},
+// rlq extras
+{topic:'t8a',disc:'rlq',q:'Um valor de R$ 200,00 sofre um aumento de 15%. Qual é o novo valor?',opts:['R$ 210,00','R$ 215,00','R$ 225,00','R$ 230,00'],a:3,exp:'15% de 200 é 30; somando ao valor original, 200 + 30 = R$ 230,00.'},
+{topic:'t8c',disc:'rlq',q:'As notas de um candidato em 4 simulados foram 60, 70, 80 e 90. Qual é a média aritmética simples dessas notas?',opts:['70','72','75','78'],a:2,exp:'(60+70+80+90) ÷ 4 = 300 ÷ 4 = 75.'},
+{topic:'t8a',disc:'rlq',q:'A Prova Objetiva do concurso do IBGE tem duração de 4 horas. Quantos minutos isso representa?',opts:['200 minutos','220 minutos','240 minutos','260 minutos'],a:2,exp:'4 horas × 60 minutos = 240 minutos.'},
+{topic:'t8b',disc:'rlq',q:'Se a afirmação "todo recenseador usa o DMC" é verdadeira, é logicamente equivalente afirmar que:',opts:['Quem não usa o DMC não é recenseador','Quem usa o DMC é recenseador','Nenhum recenseador usa o DMC','Alguns recenseadores não usam o DMC'],a:0,exp:'A contrapositiva de "todo A é B" é "quem não é B não é A" — logicamente equivalente à afirmação original.'},
+{topic:'t8a',disc:'rlq',q:'Se 4 equipes concluem um levantamento em 12 dias, em quantos dias 6 equipes concluiriam o mesmo levantamento, mantido o ritmo de trabalho?',opts:['6 dias','8 dias','9 dias','10 dias'],a:1,exp:'Regra de três inversa: 4 equipes × 12 dias = 48 "equipe-dias"; com 6 equipes, 48 ÷ 6 = 8 dias.'}
+];
+
+/* ============ ARMAZENAMENTO ============ */
+// ─────────────────────────────────────────────────────────────────────────
+// CONFIGURAÇÃO DO FIREBASE (preencha aqui para tornar o ranking e o banco de
+// questões PÚBLICOS entre todos os visitantes, quando o site estiver hospedado
+// fora do claude.ai, ex: no Vercel ou Netlify). Veja o passo a passo enviado
+// junto com este arquivo para criar o projeto e obter esses valores.
+// Se você deixar como está (com "COLE_AQUI"), o site funciona normalmente,
+// mas cada navegador guarda seus próprios dados (localStorage), sem ranking global.
+// ─────────────────────────────────────────────────────────────────────────
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCcC9jzTtmoRMPiA4WVyqSgNm91ww58bok",
+  authDomain: "trilha-acq-ibge.firebaseapp.com",
+  projectId: "trilha-acq-ibge",
+  storageBucket: "trilha-acq-ibge.firebasestorage.app",
+  messagingSenderId: "621610793519",
+  appId: "1:621610793519:web:7ba26ecb2089b5d04764da"
+};
+let fbDb = null;
+try{
+  if(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== "COLE_AQUI" && window.firebase){
+    firebase.initializeApp(FIREBASE_CONFIG);
+    fbDb = firebase.firestore();
+    console.log('Firebase conectado: ranking e banco de questões são públicos.');
+  }
+}catch(e){ console.error('Falha ao iniciar Firebase, usando localStorage local.', e); fbDb = null; }
+
+// Fora do ambiente do Claude, window.storage não existe: criamos aqui um substituto.
+// Dados "shared" (ranking, banco de questões, configurações) vão para o Firestore,
+// se configurado acima; senão, e para dados pessoais (progresso, Pomodoro), usamos
+// localStorage, que é POR NAVEGADOR (não compartilhado entre pessoas diferentes).
+if(!window.storage){
+  window.storage = {
+    async get(key, shared){
+      if(shared && fbDb){
+        const doc = await fbDb.collection('acq_shared').doc(key).get();
+        if(!doc.exists) throw new Error('not found');
+        return {key, value: doc.data().value, shared};
+      }
+      const v = localStorage.getItem('acq_'+key); if(v===null) throw new Error('not found'); return {key, value:v, shared};
+    },
+    async set(key, value, shared){
+      if(shared && fbDb){ await fbDb.collection('acq_shared').doc(key).set({value}); return {key, value, shared}; }
+      localStorage.setItem('acq_'+key, value); return {key, value, shared};
+    },
+    async delete(key, shared){
+      if(shared && fbDb){ await fbDb.collection('acq_shared').doc(key).delete(); return {key, deleted:true, shared}; }
+      localStorage.removeItem('acq_'+key); return {key, deleted:true, shared};
+    },
+    async list(prefix, shared){
+      if(shared && fbDb){
+        const snap = await fbDb.collection('acq_shared').get();
+        const keys = snap.docs.map(d=>d.id).filter(k=>k.startsWith(prefix||''));
+        return {keys, prefix, shared};
+      }
+      const keys = Object.keys(localStorage).filter(k=>k.startsWith('acq_'+(prefix||''))).map(k=>k.replace('acq_','')); return {keys, prefix, shared};
+    }
+  };
+}
+const store = {
+  async get(key, shared=false){ try{ const r = await window.storage.get(key, shared); return r ? JSON.parse(r.value) : null; }catch(e){ return null; } },
+  async set(key, value, shared=false){ try{ return await window.storage.set(key, JSON.stringify(value), shared); }catch(e){ console.error('storage set fail', e); return null; } }
+};
+
+let state = {
+  tab:'inicio',
+  mapasFilter:'todos',
+  qbank:null, config:null, ranking:null,
+  studyProgress:{}, pomodoroConfig:{studyMin:25, breakMin:5, lock:false, showTimer:true},
+  cronogramaConfig:{dias:{seg:true,ter:false,qua:true,qui:false,sex:true,sab:true,dom:false}, minutos:60},
+  adminAuthed:false,
+  exam:null, examIdx:0, examAnswers:[], examTimerId:null, examSecondsLeft:0,
+  study:null, studyIdx:0, studyAnswers:[],
+  pomodoro:{phase:'idle', secondsLeft:0, intervalId:null}
+};
+
+function uid(){ return 'q_'+Math.random().toString(36).slice(2,10); }
+
+async function ensureSeed(){
+  let bank = await store.get('qbank', true);
+  if(!bank || !bank.length){
+    bank = QBANK_SEED.map(q=>({id:uid(), ...q}));
+    await store.set('qbank', bank, true);
+  }
+  let cfg = await store.get('config', true);
+  if(!cfg){
+    cfg = {examSize:60, examTimeMin:240, adminPass:'acq2026'};
+    await store.set('config', cfg, true);
+  }
+  let rank = await store.get('ranking', true);
+  if(!rank){ rank = []; await store.set('ranking', rank, true); }
+  state.qbank = bank; state.config = cfg; state.ranking = rank;
+  state.studyProgress = (await store.get('studyProgress', false)) || {};
+  state.pomodoroConfig = (await store.get('pomodoroConfig', false)) || state.pomodoroConfig;
+  state.cronogramaConfig = (await store.get('cronogramaConfig', false)) || state.cronogramaConfig;
+}
+
+/* ============ NAVEGAÇÃO ============ */
+const TABS = [
+  {id:'inicio', label:'Início'},
+  {id:'estudar', label:'📖 Estudar'},
+  {id:'mapas', label:'🧠 Mapas Mentais'},
+  {id:'simulado', label:'📝 Simulado'},
+  {id:'pomodoro', label:'⏱ Pomodoro'},
+  {id:'cronograma', label:'🗓 Cronograma'},
+  {id:'ranking', label:'🏆 Ranking'},
+  {id:'admin', label:'🔒 Admin'}
+];
+
+function renderTabs(){
+  const nav = document.getElementById('tabs');
+  nav.innerHTML = TABS.map(t=>`<button class="${state.tab===t.id?'active':''}" onclick="goTab('${t.id}')">${t.label}</button>`).join('');
+}
+window.goTab = function(id){
+  if(state.pomodoro.phase!=='idle' && state.pomodoroConfig.lock && state.pomodoro.phase==='break'){ return; }
+  state.tab = id; render();
+};
+
+async function render(){
+  renderTabs();
+  const app = document.getElementById('app');
+  if(state.tab==='inicio') app.innerHTML = viewInicio();
+  else if(state.tab==='estudar') app.innerHTML = state.study ? viewStudySession() : viewEstudarHome();
+  else if(state.tab==='mapas') app.innerHTML = viewMapasMentais();
+  else if(state.tab==='simulado') app.innerHTML = state.exam ? viewExamSession() : viewSimuladoHome();
+  else if(state.tab==='pomodoro') app.innerHTML = viewPomodoro();
+  else if(state.tab==='cronograma') app.innerHTML = viewCronograma();
+  else if(state.tab==='ranking') { app.innerHTML = viewRankingLoading(); await loadRanking(); app.innerHTML = viewRanking(); }
+  else if(state.tab==='admin') app.innerHTML = viewAdmin();
+  attachHandlers();
+}
+
+/* ============ INÍCIO ============ */
+function viewInicio(){
+  const totalQ = state.qbank.length;
+  const doneTopics = Object.values(state.studyProgress).filter(p=>p.done).length;
+  return `
+  <section class="hero">
+    <div class="eyebrow">Processo Seletivo Simplificado · 12º Censo Agropecuário</div>
+    <h2>Agente Censitário de Qualidade (ACQ)</h2>
+    <p>Trilha de estudos com resumos, mapas mentais, simulados no estilo da prova e técnicas de estudo (revisão espaçada, ciclo de estudos e Pomodoro) para chegar preparado no dia 30 de agosto.</p>
+    <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn" onclick="goTab('simulado')">Iniciar simulado →</button>
+      <button class="btn secondary" onclick="goTab('estudar')">Estudar primeiro 📖</button>
+    </div>
+  </section>
+  <div class="grid cols3">
+    <div class="card"><div class="small">BANCO DE QUESTÕES</div><h3>${totalQ} questões</h3><div class="small">nas 4 disciplinas do edital</div></div>
+    <div class="card"><div class="small">SEU PROGRESSO</div><h3>${doneTopics} de ${TOPICS.length} tópicos</h3><div class="small">revisados no modo estudo</div></div>
+    <div class="card"><div class="small">RANKING GLOBAL</div><h3>🏆 Ver colocação</h3><div class="small" style="cursor:pointer;color:var(--forest);font-weight:700;" onclick="goTab('ranking')">abrir ranking →</div></div>
+  </div>
+  <div class="card dashed">
+    <h3>Como estudar bem para o ACQ</h3>
+    <div class="grid cols2">
+      <div><b>🔁 Revisão espaçada</b><p class="small">Não basta aprender uma vez — volte aos tópicos revisados dias depois. O modo Estudar guarda seu progresso neste navegador para você repetir os pontos fracos.</p></div>
+      <div><b>🧠 Mapas mentais</b><p class="small">Cada tópico tem um mapa mental com os ramos principais, para fixar a estrutura antes de entrar nos detalhes.</p></div>
+      <div><b>🔃 Ciclo de estudos</b><p class="small">Alterne entre Conhecimentos do IBGE, Português, Geografia e Raciocínio Lógico em vez de estudar uma única matéria por dia inteiro.</p></div>
+      <div><b>🍅 Técnica Pomodoro</b><p class="small">Use a aba Pomodoro para alternar ciclos de foco e descanso, com bloqueio opcional na pausa.</p></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Sobre a prova</h3>
+    <p class="small">60 questões objetivas, quatro disciplinas: Conhecimentos do IBGE (maior peso), Língua Portuguesa, Geografia e Raciocínio Lógico Quantitativo. Regra geral de aprovação: mínimo de 30% de acertos no total e ao menos 1 acerto em cada disciplina.</p>
+  </div>`;
+}
+
+/* ============ MAPA MENTAL (SVG) ============ */
+function renderMindmap(topic){
+  const branches = topic.mm.branches;
+  const w = 640, h = 300, cx=w/2, cy=h/2, r=105;
+  const colors = ['#2F5233','#A9762F','#3D5A73','#8F3A2B'];
+  let svg = `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">`;
+  branches.forEach((b,i)=>{
+    const angle = (Math.PI*2/branches.length)*i - Math.PI/2;
+    const bx = cx + r*Math.cos(angle), by = cy + r*Math.sin(angle);
+    svg += `<line x1="${cx}" y1="${cy}" x2="${bx}" y2="${by}" stroke="${colors[i%4]}" stroke-width="2" stroke-dasharray="4 3"/>`;
+  });
+  svg += `<circle cx="${cx}" cy="${cy}" r="54" fill="#20281F"/>`;
+  svg += `<foreignObject x="${cx-52}" y="${cy-30}" width="104" height="60"><div xmlns="http://www.w3.org/1999/xhtml" style="color:#F1EEE3;font-family:'Roboto Slab',serif;font-size:11px;text-align:center;line-height:1.2;display:flex;align-items:center;justify-content:center;height:60px;">${topic.title}</div></foreignObject>`;
+  branches.forEach((b,i)=>{
+    const angle = (Math.PI*2/branches.length)*i - Math.PI/2;
+    const bx = cx + r*Math.cos(angle), by = cy + r*Math.sin(angle);
+    svg += `<circle cx="${bx}" cy="${by}" r="9" fill="${colors[i%4]}"/>`;
+    const tx = bx + (bx>cx?18:-18), anchor = bx>cx?'start':(bx===cx?'middle':'end');
+    svg += `<text x="${tx}" y="${by+4}" font-size="12" font-family="sans-serif" font-weight="700" fill="#20281F" text-anchor="${anchor}">${b.label}</text>`;
+  });
+  svg += `</svg>`;
+  const cards = branches.map((b,i)=>`<div class="mm-branch-card" style="border-top-color:${colors[i%4]}"><b style="color:${colors[i%4]}">${b.label}</b><ul>${b.items.map(it=>`<li>${it}</li>`).join('')}</ul></div>`).join('');
+  return `<div class="mm-wrap">${svg}<div class="mm-branch-cards">${cards}</div></div>`;
+}
+
+/* ============ MAPAS MENTAIS (aba própria) ============ */
+function viewMapasMentais(){
+  const active = state.mapasFilter || 'todos';
+  const filterBtns = ['todos', ...Object.keys(DISC_LABEL)].map(d=>
+    `<button class="btn ${active===d?'':'secondary'}" style="margin:3px;" onclick="filterMapas('${d}')">${d==='todos'?'Todas as matérias':DISC_LABEL[d]}</button>`
+  ).join('');
+  const topics = TOPICS.filter(t=> active==='todos' || t.disc===active);
+  const cards = topics.map(t=>`
+    <div class="card" style="margin-bottom:22px;">
+      <div class="flex-between">
+        <h3 style="margin-bottom:2px;">${t.title}</h3>
+        <span class="pill ${t.disc}">${DISC_LABEL[t.disc]}</span>
+      </div>
+      ${renderMindmap(t)}
+    </div>`).join('');
+  return `
+  <section class="hero" style="padding-top:10px;">
+    <div class="eyebrow">Revisão visual</div>
+    <h2>🧠 Mapas Mentais</h2>
+    <p>Todos os mapas mentais da trilha reunidos em um só lugar, organizados por matéria, para revisar a estrutura de cada tópico rapidamente antes da prova.</p>
+  </section>
+  <div style="margin-bottom:18px;">${filterBtns}</div>
+  ${cards}`;
+}
+window.filterMapas = function(d){ state.mapasFilter = d; render(); };
+
+/* ============ ESTUDAR ============ */
+function viewEstudarHome(){
+  const done = Object.values(state.studyProgress).filter(p=>p.done).length;
+  const cards = TOPICS.map(t=>{
+    const prog = state.studyProgress[t.id];
+    return `<div class="topic-card">
+      <div>
+        <span class="progress-dot ${prog&&prog.done?'done':'todo'}"></span>
+        <b>${t.title}</b><br>
+        <span class="meta"><span class="pill ${t.disc}">${DISC_LABEL[t.disc]}</span> ${prog&&prog.done? '· revisado ('+prog.bestPct+'%)' : '· não revisado'}</span>
+      </div>
+      <button class="btn secondary" onclick="openTopic('${t.id}')">Abrir tópico →</button>
+    </div>`;
+  }).join('');
+  return `
+  <section class="hero" style="padding-top:10px;">
+    <div class="eyebrow">Material de Estudo</div>
+    <h2>📖 Trilha por tópico</h2>
+    <p>Leia o resumo, confira os pontos-chave, o mapa mental e a dica de prova de cada tópico — depois pratique só as questões daquele tema. ${done} de ${TOPICS.length} tópicos revisados.</p>
+  </section>
+  <div class="topic-list">${cards}</div>
+  <div class="card" style="margin-top:20px;text-align:center;">
+    <p class="small">Quer treinar tudo junto, no estilo da prova real?</p>
+    <button class="btn" onclick="goTab('simulado')">Fazer simulado completo →</button>
+  </div>`;
+}
+
+window.openTopic = function(id){
+  const topic = TOPICS.find(t=>t.id===id);
+  const qs = state.qbank.filter(q=>q.topic===id);
+  state.study = {topic, qs: shuffle(qs.slice())};
+  state.studyIdx = 0; state.studyAnswers = [];
+  render();
+};
+
+function viewStudySession(){
+  const {topic} = state.study;
+  if(state.studyIdx === -1){ return viewStudyResult(); }
+  if(state.studyIdx >= state.study.qs.length){
+    return `
+    <div class="card">
+      <h2>Material revisado ✓</h2>
+      <p>Você concluiu a leitura do tópico <b>${topic.title}</b>. Agora pratique as questões deste tema.</p>
+      <button class="btn" onclick="startTopicPractice()">Praticar questões deste tópico →</button>
+      <button class="btn secondary" onclick="closeStudy()">Voltar aos tópicos</button>
+    </div>`;
+  }
+  return `
+  <div class="flex-between" style="margin-bottom:10px;">
+    <span class="pill ${topic.disc}">${DISC_LABEL[topic.disc]}</span>
+    <button class="btn secondary" onclick="closeStudy()">← todos os tópicos</button>
+  </div>
+  <h2>${topic.title}</h2>
+  <div class="card"><h3>Resumo</h3><p>${topic.resumo}</p></div>
+  <div class="card"><h3>Pontos-chave</h3><ul>${topic.pontos.map(p=>`<li>${p}</li>`).join('')}</ul></div>
+  <div class="card" style="border-left:4px solid var(--gold);"><h3>💡 Dica de prova</h3><p>${topic.dica}</p></div>
+  <div class="card"><div class="flex-between"><h3>🧠 Mapa mental</h3><button class="btn secondary" style="padding:6px 12px;font-size:12px;" onclick="goTab('mapas')">Ver todos os mapas →</button></div>${renderMindmap(topic)}</div>
+  <div style="text-align:center;margin-top:16px;">
+    <button class="btn" onclick="startTopicPractice()">📖 Praticar questões deste tópico →</button>
+    <button class="btn secondary" onclick="closeStudy()">Voltar</button>
+  </div>`;
+}
+
+window.startTopicPractice = function(){ state.studyIdx = 0; state.studyAnswers=[]; state.study.practicing = true; renderStudyQuestion(); };
+window.closeStudy = function(){ state.study = null; state.tab='estudar'; render(); };
+
+function renderStudyQuestion(){
+  const app = document.getElementById('app');
+  const {qs, topic} = state.study;
+  if(!qs.length){ app.innerHTML = `<div class="card"><p>Ainda não há questões cadastradas para este tópico.</p><button class="btn secondary" onclick="closeStudy()">Voltar</button></div>`; return; }
+  if(state.studyIdx >= qs.length){ app.innerHTML = studyResultHTML(); attachHandlers(); return; }
+  const q = qs[state.studyIdx];
+  app.innerHTML = `
+  <div class="flex-between"><span class="pill ${topic.disc}">📖 Modo estudo — não conta para o ranking</span><span class="small">Questão ${state.studyIdx+1} de ${qs.length}</span></div>
+  <div class="question-box">
+    <h3>${q.q}</h3>
+    <div id="opts">${q.opts.map((o,i)=>`<button class="opt" data-i="${i}" onclick="answerStudy(${i})">${String.fromCharCode(65+i)}) ${o}</button>`).join('')}</div>
+    <div id="studyExplain"></div>
+  </div>`;
+}
+
+window.answerStudy = function(i){
+  const {qs} = state.study;
+  const q = qs[state.studyIdx];
+  const btns = document.querySelectorAll('#opts .opt');
+  btns.forEach((b,idx)=>{ b.classList.add('disabled'); b.onclick=null; if(idx===q.a) b.classList.add('correct'); else if(idx===i) b.classList.add('wrong'); });
+  state.studyAnswers.push(i===q.a);
+  document.getElementById('studyExplain').innerHTML = `<div class="explain"><b>${i===q.a?'Certo!':'Não foi dessa vez.'}</b> ${q.exp}</div>
+    <div style="margin-top:12px;"><button class="btn" onclick="nextStudyQ()">Próxima →</button></div>`;
+};
+window.nextStudyQ = function(){ state.studyIdx++; renderStudyQuestion(); };
+
+function studyResultHTML(){
+  const {qs, topic} = state.study;
+  const correct = state.studyAnswers.filter(Boolean).length;
+  const pct = Math.round(100*correct/qs.length);
+  if(pct>=70){
+    const prev = state.studyProgress[topic.id] || {};
+    state.studyProgress[topic.id] = {done:true, bestPct: Math.max(prev.bestPct||0, pct)};
+    store.set('studyProgress', state.studyProgress, false);
+  }
+  return `
+  <div class="card">
+    <div class="pill ${topic.disc}">📖 Resultado do modo estudo</div>
+    <h2>${correct} de ${qs.length} certas (${pct}%)</h2>
+    <p class="small">Este resultado <b>não foi</b> guardado no ranking — é só para treino. A partir de 70% de acertos, o tópico é marcado como revisado automaticamente.</p>
+    <div style="margin-top:14px;">
+      <button class="btn" onclick="startTopicPractice()">Repetir tópico →</button>
+      <button class="btn secondary" onclick="closeStudy()">Outros tópicos</button>
+      <button class="btn gold" onclick="goTab('simulado')">Fazer avaliação completa</button>
+    </div>
+  </div>`;
+}
+function viewStudyResult(){ return studyResultHTML(); }
+
+/* ============ SIMULADO ============ */
+function viewSimuladoHome(){
+  return `
+  <section class="hero" style="padding-top:10px;">
+    <div class="eyebrow">Avaliação completa</div>
+    <h2>Simulado estilo prova ACQ</h2>
+    <p>${state.config.examSize} questões, seguindo a distribuição oficial do Edital nº 02/2026: Conhecimentos Técnicos (20), Língua Portuguesa (15), Geografia (15) e Raciocínio Lógico Quantitativo (10). Cronômetro de ${state.config.examTimeMin} minutos (a prova real dura 4 horas) e resultado detalhado por disciplina.</p>
+  </section>
+  <div class="card">
+    <p class="small">Regra de aprovação simulada: mínimo de 30% de acertos no total <b>e</b> pelo menos 1 acerto em cada disciplina.</p>
+    <button class="btn" onclick="askNameAndStart()">Iniciar avaliação →</button>
+  </div>`;
+}
+
+window.askNameAndStart = function(){
+  const app = document.getElementById('app');
+  app.innerHTML = `
+  <div class="card" style="max-width:420px;margin:40px auto;text-align:center;">
+    <h3>Como te chamas?</h3>
+    <p class="small">O teu nome aparecerá no ranking global, visível para todos os participantes.</p>
+    <div class="field"><input type="text" id="playerName" placeholder="Seu nome" maxlength="30"></div>
+    <button class="btn" onclick="beginExam()">Começar →</button>
+    <button class="btn secondary" onclick="goTab('simulado')">Cancelar</button>
+  </div>`;
+};
+
+// Distribuição oficial do Edital nº 02/2026 (ACQ): 60 questões = 20 Conhecimentos Técnicos + 15 Português + 15 Geografia + 10 RLQ
+const DISC_WEIGHTS = {tecnico:20, portugues:15, geografia:15, rlq:10};
+
+function buildExamQuestions(size){
+  const byDisc = {};
+  state.qbank.forEach(q=>{ (byDisc[q.disc]=byDisc[q.disc]||[]).push(q); });
+  const totalWeight = Object.values(DISC_WEIGHTS).reduce((a,b)=>a+b,0);
+  let picked = [];
+  const discs = Object.keys(DISC_WEIGHTS);
+  // aloca proporcionalmente à distribuição real do edital, respeitando o que existe no banco
+  discs.forEach(d=>{
+    const want = Math.max(1, Math.round(size * (DISC_WEIGHTS[d]/totalWeight)));
+    const arr = shuffle((byDisc[d]||[]).slice());
+    picked.push(...arr.slice(0, want));
+  });
+  const usedIds = new Set(picked.map(q=>q.id));
+  let pool = shuffle(state.qbank.filter(q=>!usedIds.has(q.id)));
+  while(picked.length < size && pool.length){ picked.push(pool.shift()); }
+  return shuffle(picked).slice(0, size);
+}
+
+window.beginExam = function(){
+  const nameEl = document.getElementById('playerName');
+  const name = (nameEl.value||'').trim() || 'Anônimo';
+  const size = Math.min(state.config.examSize, state.qbank.length);
+  const picked = buildExamQuestions(size);
+  state.exam = {name, qs:picked, startedAt:Date.now()};
+  state.examIdx = 0; state.examAnswers = [];
+  state.examSecondsLeft = state.config.examTimeMin*60;
+  clearInterval(state.examTimerId);
+  state.examTimerId = setInterval(examTick, 1000);
+  render();
+};
+
+function examTick(){
+  if(!state.exam) return;
+  state.examSecondsLeft--;
+  const t = document.getElementById('examTimer');
+  if(t) t.textContent = fmtTime(state.examSecondsLeft);
+  if(state.examSecondsLeft<=0){ clearInterval(state.examTimerId); finishExam(); }
+}
+function fmtTime(s){ s=Math.max(0,s); const m=Math.floor(s/60), sec=s%60; return `${m}:${String(sec).padStart(2,'0')}`; }
+
+function viewExamSession(){
+  if(state.examIdx >= state.exam.qs.length) return viewExamResult();
+  const q = state.exam.qs[state.examIdx];
+  return `
+  <div class="flex-between" style="margin-bottom:10px;">
+    <span class="pill ${q.disc}">${DISC_LABEL[q.disc]}</span>
+    <span class="timerbar" id="examTimer">${fmtTime(state.examSecondsLeft)}</span>
+  </div>
+  <div class="small" style="margin-bottom:6px;">Questão ${state.examIdx+1} de ${state.exam.qs.length}</div>
+  <div class="question-box">
+    <h3>${q.q}</h3>
+    <div id="opts">${q.opts.map((o,i)=>`<button class="opt" data-i="${i}" onclick="answerExam(${i})">${String.fromCharCode(65+i)}) ${o}</button>`).join('')}</div>
+  </div>`;
+}
+
+window.answerExam = function(i){
+  const q = state.exam.qs[state.examIdx];
+  state.examAnswers.push({disc:q.disc, correct: i===q.a});
+  state.examIdx++;
+  if(state.examIdx >= state.exam.qs.length){ finishExam(); return; }
+  render();
+};
+
+async function finishExam(){
+  clearInterval(state.examTimerId);
+  if(document.getElementById('app').innerHTML.indexOf('Resultado da avaliação')===-1){
+    state.examIdx = state.exam.qs.length;
+    render();
+  }
+  const correct = state.examAnswers.filter(a=>a.correct).length;
+  const total = state.exam.qs.length;
+  const timeUsed = state.config.examTimeMin*60 - Math.max(0,state.examSecondsLeft);
+  const rank = (await store.get('ranking', true)) || [];
+  rank.push({name: state.exam.name, correct, total, wrong: total-correct, pct: Math.round(100*correct/total), timeSeconds: timeUsed, date: new Date().toISOString()});
+  await store.set('ranking', rank, true);
+  state.ranking = rank;
+}
+
+function viewExamResult(){
+  const correct = state.examAnswers.filter(a=>a.correct).length;
+  const total = state.exam.qs.length;
+  const wrong = total-correct;
+  const pct = Math.round(100*correct/total);
+  const timeUsed = state.config.examTimeMin*60 - Math.max(0,state.examSecondsLeft);
+  const byDisc = {};
+  state.examAnswers.forEach(a=>{ byDisc[a.disc]=byDisc[a.disc]||{c:0,t:0}; byDisc[a.disc].t++; if(a.correct) byDisc[a.disc].c++; });
+  const rows = Object.keys(DISC_LABEL).map(d=>{
+    const info = byDisc[d]||{c:0,t:0};
+    return `<tr><td>${DISC_LABEL[d]}</td><td>${info.c}/${info.t}</td><td>${info.c>=1?'✅':'⚠️ 0 acertos'}</td></tr>`;
+  }).join('');
+  const aprovado = pct>=30 && Object.keys(DISC_LABEL).every(d=> (byDisc[d]&&byDisc[d].c>=1));
+  return `
+  <div class="card">
+    <div class="eyebrow">Resultado da avaliação</div>
+    <h2>${state.exam.name}, você acertou ${correct} de ${total} (${pct}%)</h2>
+    <div class="grid cols3" style="margin:16px 0;">
+      <div class="card"><div class="small">ACERTOS</div><h3>${correct}</h3></div>
+      <div class="card"><div class="small">ERROS</div><h3>${wrong}</h3></div>
+      <div class="card"><div class="small">TEMPO</div><h3>${fmtTime(timeUsed)}</h3></div>
+    </div>
+    <table class="ranking"><thead><tr><th>Disciplina</th><th>Acertos</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="explain" style="margin-top:14px;">Situação (regra do edital simulada — mín. 30% no total e 1 acerto por disciplina): <b>${aprovado?'Apto ✅':'Não apto ⚠️'}</b></div>
+    <div style="margin-top:16px;">
+      <button class="btn" onclick="restartExam()">Nova tentativa →</button>
+      <button class="btn secondary" onclick="goToRankingFromExam()">Ver ranking</button>
+    </div>
+  </div>`;
+}
+window.restartExam = function(){ state.exam=null; state.tab='simulado'; render(); };
+window.goToRankingFromExam = function(){ state.exam=null; state.tab='ranking'; render(); };
+
+/* ============ RANKING ============ */
+function viewRankingLoading(){ return `<h2>🏆 Ranking Geral</h2><p class="small">A carregar...</p>`; }
+async function loadRanking(){ state.ranking = (await store.get('ranking', true)) || []; }
+function viewRanking(){
+  const sorted = state.ranking.slice().sort((a,b)=> b.correct-a.correct || a.timeSeconds-b.timeSeconds);
+  const rows = sorted.map((r,i)=>`<tr><td>${i+1}º</td><td>${r.name}</td><td>${r.correct}/${r.total}</td><td>${r.pct}%</td><td>${fmtTime(r.timeSeconds)}</td></tr>`).join('') || `<tr><td colspan="5" class="small">Nenhuma avaliação completa registrada ainda.</td></tr>`;
+  return `
+  <div class="flex-between"><h2>🏆 Ranking Geral</h2><button class="btn secondary" onclick="goTab('ranking')">↻ Atualizar</button></div>
+  <p class="small">Ordenado por acertos — em caso de empate, quem terminou mais rápido fica na frente. Só a avaliação completa entra aqui; o modo estudo não conta.</p>
+  <table class="ranking"><thead><tr><th>#</th><th>Nome</th><th>Acertos</th><th>%</th><th>Tempo</th></tr></thead><tbody>${rows}</tbody></table>
+  <p class="small" style="margin-top:14px;">🔒 Dados partilhados e visíveis para todos os participantes.</p>
+  <button class="btn" onclick="goTab('simulado')">Nova avaliação →</button>`;
+}
+
+/* ============ POMODORO ============ */
+function beep(){
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const o = ctx.createOscillator(); const g = ctx.createGain();
+    o.type='sine'; o.frequency.value=660; o.connect(g); g.connect(ctx.destination);
+    g.gain.setValueAtTime(0.15, ctx.currentTime);
+    o.start(); o.stop(ctx.currentTime+0.4);
+  }catch(e){}
+}
+
+/* ============ CRONOGRAMA SEMANAL ============ */
+const CRONO_DIAS = [
+  {k:'seg', label:'Segunda'}, {k:'ter', label:'Terça'}, {k:'qua', label:'Quarta'},
+  {k:'qui', label:'Quinta'}, {k:'sex', label:'Sexta'}, {k:'sab', label:'Sábado'}, {k:'dom', label:'Domingo'}
+];
+const CRONO_BLOCO_MIN = 50; // duração aproximada de um bloco de estudo (resumo + pontos + prática)
+
+function getExamDate(){
+  const now = new Date();
+  let exam = new Date(now.getFullYear(), 7, 30, 23, 59, 59); // 30/agosto (mês 7 = agosto)
+  if(now > exam) exam = new Date(now.getFullYear()+1, 7, 30, 23, 59, 59);
+  return exam;
+}
+
+// Intercala os tópicos das 4 disciplinas de forma proporcional, em vez de agrupar por matéria
+function buildTopicOrder(){
+  const byDisc = {};
+  TOPICS.forEach(t=>{ (byDisc[t.disc] = byDisc[t.disc]||[]).push(t); });
+  const withKey = [];
+  Object.values(byDisc).forEach(list=>{ list.forEach((t,i)=>withKey.push({t, key:(i+0.5)/list.length})); });
+  withKey.sort((a,b)=>a.key-b.key);
+  return withKey.map(w=>w.t);
+}
+
+function buildWeekPlan(cfg){
+  const order = buildTopicOrder();
+  const doneIds = new Set(Object.keys(state.studyProgress).filter(id=>state.studyProgress[id] && state.studyProgress[id].done));
+  const pending = order.filter(t=>!doneIds.has(t.id));
+  const doneTopics = order.filter(t=>doneIds.has(t.id));
+  const examDate = getExamDate();
+  const daysLeft = Math.max(0, Math.ceil((examDate - new Date())/(24*3600*1000)));
+  const weeksLeft = Math.max(1, Math.ceil(daysLeft/7));
+  const revPool = doneTopics.length ? doneTopics : order;
+
+  function nextItem(idx){
+    if(idx < pending.length) return {type:'novo', topic:pending[idx]};
+    const extra = idx - pending.length;
+    const simuladoEvery = weeksLeft<=3 ? 2 : 3; // reta final: simulados mais frequentes
+    if(extra % simuladoEvery === (simuladoEvery-1)) return {type:'simulado'};
+    return {type:'revisao', topic: revPool[extra % revPool.length]};
+  }
+
+  const selectedDays = CRONO_DIAS.filter(d=>cfg.dias[d.k]);
+  const minutesPerDay = Math.max(15, cfg.minutos||60);
+  const blocksPerDay = Math.max(1, Math.min(4, Math.floor(minutesPerDay/CRONO_BLOCO_MIN)));
+  let cursor = 0;
+  const plan = selectedDays.map(d=>{
+    const items = [];
+    for(let b=0; b<blocksPerDay; b++){ items.push(nextItem(cursor)); cursor++; }
+    return {dia:d, items};
+  });
+  return {plan, pending, doneTopics, daysLeft, weeksLeft, minutesPerDay, blocksPerDay, examDate};
+}
+
+function renderCronoItem(it){
+  if(it.type==='simulado'){
+    return `<div><span class="pill rlq">🎯 Simulado</span> Faça um simulado rápido na aba 📝 Simulado.</div>`;
+  }
+  const label = it.type==='novo' ? 'Novo conteúdo' : '🔁 Revisão';
+  return `<div><span class="pill ${it.topic.disc}">${label}</span> ${it.topic.title}</div>`;
+}
+
+function viewCronograma(){
+  const cfg = state.cronogramaConfig;
+  const anySelected = CRONO_DIAS.some(d=>cfg.dias[d.k]);
+  const examDate = getExamDate();
+  const examStr = examDate.toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'});
+
+  let html = `
+  <section class="hero" style="padding-top:10px;">
+    <div class="eyebrow">Organização do tempo</div>
+    <h2>Cronograma de estudos semanal</h2>
+    <p>Marque os dias em que você consegue estudar e quanto tempo tem disponível em cada um. O cronograma distribui os ${TOPICS.length} tópicos entre as quatro disciplinas, alternando conteúdo novo, revisão espaçada e simulados — seguindo o ciclo de estudos recomendado.</p>
+  </section>
+  <div class="card">
+    <h3>Seus dias e tempo disponível</h3>
+    <div class="grid cols3" style="margin-bottom:12px;">
+      ${CRONO_DIAS.map(d=>`<label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="dia_${d.k}" ${cfg.dias[d.k]?'checked':''} style="width:auto;"> ${d.label}</label>`).join('')}
+    </div>
+    <div class="field" style="max-width:260px;">
+      <label>Minutos disponíveis, em cada dia marcado</label>
+      <input type="number" id="cronoMinutos" min="15" max="240" step="5" value="${cfg.minutos}">
+    </div>
+    <button class="btn" onclick="gerarCronograma()">Gerar cronograma →</button>
+  </div>`;
+
+  if(!anySelected){
+    html += `<div class="card dashed"><p class="small">Marque ao menos um dia da semana acima para gerar seu cronograma.</p></div>`;
+    return html;
+  }
+
+  const r = buildWeekPlan(cfg);
+  html += `
+  <div class="grid cols3">
+    <div class="card"><div class="small">PROVA</div><h3>${examStr}</h3><div class="small">faltam ${r.daysLeft} dias (~${r.weeksLeft} semanas)</div></div>
+    <div class="card"><div class="small">CARGA SEMANAL</div><h3>${(r.plan.length*r.minutesPerDay/60).toFixed(1)}h / semana</h3><div class="small">${r.plan.length} dia(s) × ${r.blocksPerDay} bloco(s) de ~${CRONO_BLOCO_MIN}min</div></div>
+    <div class="card"><div class="small">CONTEÚDO</div><h3>${r.pending.length} de ${TOPICS.length} tópicos</h3><div class="small">${r.pending.length ? 'ainda não marcados como estudados' : 'todo o conteúdo já foi estudado ao menos 1x 🎉'}</div></div>
+  </div>
+  <div class="card">
+    <h3>Semana modelo</h3>
+    <p class="small">Repita esse padrão a cada semana até a prova. Conforme você for concluindo tópicos na aba 📖 Estudar, o cronograma passa a priorizar automaticamente o que ainda falta, e intercala mais revisão e simulados perto da data da prova.</p>
+    <div class="topic-list">
+      ${r.plan.map(dia=>`
+        <div class="topic-card" style="align-items:flex-start;">
+          <div style="min-width:100px;"><b>${dia.dia.label}</b></div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+            ${dia.items.map(it=>renderCronoItem(it)).join('')}
+          </div>
+        </div>`).join('')}
+    </div>
+  </div>`;
+  return html;
+}
+
+window.gerarCronograma = function(){
+  const dias = {};
+  CRONO_DIAS.forEach(d=>{ dias[d.k] = document.getElementById('dia_'+d.k).checked; });
+  const minutos = Math.max(15, parseInt(document.getElementById('cronoMinutos').value)||60);
+  state.cronogramaConfig = {dias, minutos};
+  store.set('cronogramaConfig', state.cronogramaConfig, false);
+  render();
+};
+
+function viewPomodoro(){
+  const cfg = state.pomodoroConfig;
+  const p = state.pomodoro;
+  const phaseLabel = p.phase==='idle' ? 'Pronto para começar' : (p.phase==='study' ? 'Foco nos estudos' : 'Pausa — descanse');
+  const timeDisplay = cfg.showTimer ? `<div class="timerbar" style="font-size:34px;padding:14px 26px;">${fmtTime(p.secondsLeft)}</div>` : `<div class="small">⏱ cronômetro oculto — você será avisado na hora certa</div>`;
+  return `
+  <section class="hero" style="padding-top:10px;">
+    <div class="eyebrow">Técnica Pomodoro</div>
+    <h2>Ciclos de foco e descanso</h2>
+    <p>Configure o tempo de estudo e de pausa. O site avisa quando o tempo termina e pode travar a tela durante o descanso, se você preferir.</p>
+  </section>
+  <div class="grid cols2">
+    <div class="card">
+      <h3>Configurações</h3>
+      <div class="field"><label>Minutos de estudo</label><input type="number" id="pStudyMin" min="1" max="120" value="${cfg.studyMin}"></div>
+      <div class="field"><label>Minutos de pausa</label><input type="number" id="pBreakMin" min="1" max="60" value="${cfg.breakMin}"></div>
+      <div class="field"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="pLock" ${cfg.lock?'checked':''} style="width:auto;"> Travar a tela durante a pausa</label></div>
+      <div class="field"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="pShow" ${cfg.showTimer?'checked':''} style="width:auto;"> Mostrar o cronômetro em contagem</label></div>
+      <button class="btn secondary" onclick="savePomodoroConfig()">Salvar configurações</button>
+    </div>
+    <div class="card" style="text-align:center;">
+      <div class="pill ${p.phase==='study'?'tecnico':(p.phase==='break'?'geografia':'')}" style="margin-bottom:10px;">${phaseLabel}</div>
+      ${timeDisplay}
+      <div style="margin-top:16px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+        ${p.phase==='idle' ? `<button class="btn" onclick="startPomodoro()">Iniciar foco →</button>` : `<button class="btn rust" onclick="stopPomodoro()">Encerrar ciclo</button>`}
+      </div>
+    </div>
+  </div>
+  ${(p.phase==='break' && cfg.lock) ? `<div class="overlay" id="lockOverlay"><h2>🍅 Pausa em andamento</h2><p>A tela ficará bloqueada até o fim do descanso.</p>${cfg.showTimer? `<div class="timerbar" style="font-size:44px;margin-top:14px;">${fmtTime(p.secondsLeft)}</div>` : `<p class="small">Volte quando ouvir o aviso sonoro.</p>`}</div>` : ''}
+  `;
+}
+
+window.savePomodoroConfig = function(){
+  const studyMin = Math.max(1, parseInt(document.getElementById('pStudyMin').value)||25);
+  const breakMin = Math.max(1, parseInt(document.getElementById('pBreakMin').value)||5);
+  const lock = document.getElementById('pLock').checked;
+  const showTimer = document.getElementById('pShow').checked;
+  state.pomodoroConfig = {studyMin, breakMin, lock, showTimer};
+  store.set('pomodoroConfig', state.pomodoroConfig, false);
+  render();
+};
+
+window.startPomodoro = function(){
+  state.pomodoro.phase = 'study';
+  state.pomodoro.secondsLeft = state.pomodoroConfig.studyMin*60;
+  clearInterval(state.pomodoro.intervalId);
+  state.pomodoro.intervalId = setInterval(pomodoroTick, 1000);
+  render();
+};
+window.stopPomodoro = function(){
+  clearInterval(state.pomodoro.intervalId);
+  state.pomodoro = {phase:'idle', secondsLeft:0, intervalId:null};
+  render();
+};
+function pomodoroTick(){
+  const p = state.pomodoro;
+  p.secondsLeft--;
+  const timerEls = document.querySelectorAll('.timerbar');
+  timerEls.forEach(el=>{ el.textContent = fmtTime(p.secondsLeft); });
+  if(p.secondsLeft<=0){
+    beep();
+    if(p.phase==='study'){ p.phase='break'; p.secondsLeft = state.pomodoroConfig.breakMin*60; }
+    else { p.phase='study'; p.secondsLeft = state.pomodoroConfig.studyMin*60; }
+    render();
+  }
+}
+
+/* ============ ADMIN ============ */
+function viewAdmin(){
+  if(!state.adminAuthed){
+    return `
+    <div class="card" style="max-width:400px;margin:40px auto;text-align:center;">
+      <h3>🔒 Área Admin</h3>
+      <p class="small">Introduz a senha de administrador para gerir perguntas, ranking e configurações.</p>
+      <div class="field"><input type="password" id="adminPass" placeholder="Senha"></div>
+      <div id="adminErr" class="errmsg"></div>
+      <button class="btn" onclick="tryAdminLogin()">Entrar</button>
+      <button class="btn secondary" onclick="goTab('inicio')">Cancelar</button>
+      <p class="small" style="margin-top:14px;">Senha padrão: acq2026 (altere em Configurações após entrar).</p>
+    </div>`;
+  }
+  const qlist = state.qbank.map(q=>`<div class="admin-q"><span><span class="pill ${q.disc}">${DISC_LABEL[q.disc]}</span> ${q.q.slice(0,70)}${q.q.length>70?'…':''}</span><button class="btn rust" style="padding:4px 10px;font-size:12px;" onclick="deleteQuestion('${q.id}')">🗑</button></div>`).join('');
+  return `
+  <div class="flex-between"><h2>🔒 Painel Admin</h2><button class="btn secondary" onclick="adminLogout()">Sair</button></div>
+  <div class="grid cols2">
+    <div class="card">
+      <h3>⚙️ Configurações</h3>
+      <div class="field"><label>Nº de questões por avaliação</label><input type="number" id="cfgSize" value="${state.config.examSize}" min="4"></div>
+      <div class="field"><label>Tempo limite da avaliação (minutos, 0 = sem limite)</label><input type="number" id="cfgTime" value="${state.config.examTimeMin}" min="0"></div>
+      <div class="field"><label>Nova senha de administrador</label><input type="text" id="cfgPass" placeholder="deixe em branco para manter"></div>
+      <button class="btn" onclick="saveAdminConfig()">Guardar configurações</button>
+    </div>
+    <div class="card">
+      <h3>🏆 Ranking</h3>
+      <p class="small">${state.ranking.length} registros salvos.</p>
+      <button class="btn rust" onclick="resetRanking()">🗑 Zerar ranking inteiro</button>
+    </div>
+  </div>
+  <div class="card">
+    <h3>📝 Perguntas <span class="badge-count">${state.qbank.length}</span></h3>
+    <div class="admin-list">${qlist}</div>
+    <h4 style="margin-top:18px;">+ Adicionar nova questão</h4>
+    <div class="field"><label>Disciplina</label><select id="nqDisc">${Object.keys(DISC_LABEL).map(d=>`<option value="${d}">${DISC_LABEL[d]}</option>`).join('')}</select></div>
+    <div class="field"><label>Tópico de estudo (para o modo prática na aba Estudar)</label><select id="nqTopic">${TOPICS.map(t=>`<option value="${t.id}">${t.title}</option>`).join('')}</select></div>
+    <div class="field"><label>Enunciado</label><textarea id="nqQ" rows="2"></textarea></div>
+    <div class="field"><label>Alternativa A</label><input type="text" id="nqA"></div>
+    <div class="field"><label>Alternativa B</label><input type="text" id="nqB"></div>
+    <div class="field"><label>Alternativa C</label><input type="text" id="nqC"></div>
+    <div class="field"><label>Alternativa D</label><input type="text" id="nqD"></div>
+    <div class="field"><label>Alternativa correta</label><select id="nqCorrect"><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option></select></div>
+    <div class="field"><label>Explicação (mostrada após responder)</label><textarea id="nqExp" rows="2"></textarea></div>
+    <button class="btn" onclick="addQuestion()">Adicionar questão</button>
+    <div id="nqErr" class="errmsg"></div>
+  </div>`;
+}
+
+window.tryAdminLogin = function(){
+  const val = document.getElementById('adminPass').value;
+  if(val === state.config.adminPass){ state.adminAuthed = true; render(); }
+  else { document.getElementById('adminErr').textContent = 'Senha incorreta.'; }
+};
+window.adminLogout = function(){ state.adminAuthed = false; render(); };
+
+window.saveAdminConfig = async function(){
+  const size = Math.max(4, parseInt(document.getElementById('cfgSize').value)||60);
+  const time = Math.max(0, parseInt(document.getElementById('cfgTime').value)||70);
+  const newPass = document.getElementById('cfgPass').value.trim();
+  state.config = {examSize:size, examTimeMin:time, adminPass: newPass || state.config.adminPass};
+  await store.set('config', state.config, true);
+  render();
+};
+
+window.resetRanking = async function(){
+  if(!confirm('Zerar o ranking inteiro? Esta ação não pode ser desfeita.')) return;
+  state.ranking = [];
+  await store.set('ranking', [], true);
+  render();
+};
+
+window.deleteQuestion = async function(id){
+  state.qbank = state.qbank.filter(q=>q.id!==id);
+  await store.set('qbank', state.qbank, true);
+  render();
+};
+
+window.addQuestion = async function(){
+  const q = document.getElementById('nqQ').value.trim();
+  const opts = ['nqA','nqB','nqC','nqD'].map(id=>document.getElementById(id).value.trim());
+  const err = document.getElementById('nqErr');
+  if(!q || opts.some(o=>!o)){ err.textContent = 'Preencha o enunciado e as quatro alternativas.'; return; }
+  const newQ = {
+    id: uid(),
+    disc: document.getElementById('nqDisc').value,
+    topic: document.getElementById('nqTopic').value,
+    q, opts, a: parseInt(document.getElementById('nqCorrect').value),
+    exp: document.getElementById('nqExp').value.trim() || 'Sem explicação cadastrada.'
+  };
+  state.qbank.push(newQ);
+  await store.set('qbank', state.qbank, true);
+  render();
+};
+
+/* ============ UTIL ============ */
+function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+function attachHandlers(){}
+
+/* ============ BOOT ============ */
+(async function(){
+  await ensureSeed();
+  render();
+})();
+</script>
+</body>
+</html>
