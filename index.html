@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -7,6 +8,7 @@
 <!-- Firebase (só é usado quando o site roda FORA do claude.ai, para deixar o ranking/banco de questões públicos entre visitantes) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <style>
 :root{
   --paper:#F1EEE3;
@@ -388,18 +390,28 @@ const FIREBASE_CONFIG = {
   appId: "1:621610793519:web:7ba26ecb2089b5d04764da"
 };
 let fbDb = null;
+let fbAuth = null;
 try{
   if(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== "COLE_AQUI" && window.firebase){
     firebase.initializeApp(FIREBASE_CONFIG);
     fbDb = firebase.firestore();
+    fbAuth = firebase.auth();
     console.log('Firebase conectado: ranking e banco de questões são públicos.');
   }
-}catch(e){ console.error('Falha ao iniciar Firebase, usando localStorage local.', e); fbDb = null; }
+}catch(e){ console.error('Falha ao iniciar Firebase, usando localStorage local.', e); fbDb = null; fbAuth = null; }
 
 // Fora do ambiente do Claude, window.storage não existe: criamos aqui um substituto.
 // Dados "shared" (ranking, banco de questões, configurações) vão para o Firestore,
 // se configurado acima; senão, e para dados pessoais (progresso, Pomodoro), usamos
 // localStorage, que é POR NAVEGADOR (não compartilhado entre pessoas diferentes).
+// Dados pessoais (studyProgress, pomodoroConfig, cronogramaConfig): se houver um usuário
+// autenticado (Firebase Auth), guardamos na conta dele no Firestore (sincroniza entre
+// aparelhos); senão, caem no localStorage do navegador, como antes.
+function personalDocRef(key){
+  const u = fbAuth && fbAuth.currentUser;
+  if(!u || !fbDb) return null;
+  return fbDb.collection('acq_users').doc(u.uid).collection('data').doc(key);
+}
 if(!window.storage){
   window.storage = {
     async get(key, shared){
@@ -408,19 +420,35 @@ if(!window.storage){
         if(!doc.exists) throw new Error('not found');
         return {key, value: doc.data().value, shared};
       }
+      const ref = !shared && personalDocRef(key);
+      if(ref){
+        const doc = await ref.get();
+        if(!doc.exists) throw new Error('not found');
+        return {key, value: doc.data().value, shared};
+      }
       const v = localStorage.getItem('acq_'+key); if(v===null) throw new Error('not found'); return {key, value:v, shared};
     },
     async set(key, value, shared){
       if(shared && fbDb){ await fbDb.collection('acq_shared').doc(key).set({value}); return {key, value, shared}; }
+      const ref = !shared && personalDocRef(key);
+      if(ref){ await ref.set({value}); return {key, value, shared}; }
       localStorage.setItem('acq_'+key, value); return {key, value, shared};
     },
     async delete(key, shared){
       if(shared && fbDb){ await fbDb.collection('acq_shared').doc(key).delete(); return {key, deleted:true, shared}; }
+      const ref = !shared && personalDocRef(key);
+      if(ref){ await ref.delete(); return {key, deleted:true, shared}; }
       localStorage.removeItem('acq_'+key); return {key, deleted:true, shared};
     },
     async list(prefix, shared){
       if(shared && fbDb){
         const snap = await fbDb.collection('acq_shared').get();
+        const keys = snap.docs.map(d=>d.id).filter(k=>k.startsWith(prefix||''));
+        return {keys, prefix, shared};
+      }
+      const u = !shared && fbAuth && fbAuth.currentUser;
+      if(u && fbDb){
+        const snap = await fbDb.collection('acq_users').doc(u.uid).collection('data').get();
         const keys = snap.docs.map(d=>d.id).filter(k=>k.startsWith(prefix||''));
         return {keys, prefix, shared};
       }
@@ -442,7 +470,8 @@ let state = {
   adminAuthed:false,
   exam:null, examIdx:0, examAnswers:[], examTimerId:null, examSecondsLeft:0,
   study:null, studyIdx:0, studyAnswers:[],
-  pomodoro:{phase:'idle', secondsLeft:0, intervalId:null}
+  pomodoro:{phase:'idle', secondsLeft:0, intervalId:null},
+  authUser:null, authView:'entrar', authError:'', authBusy:false
 };
 
 function uid(){ return 'q_'+Math.random().toString(36).slice(2,10); }
@@ -475,12 +504,17 @@ const TABS = [
   {id:'pomodoro', label:'⏱ Pomodoro'},
   {id:'cronograma', label:'🗓 Cronograma'},
   {id:'ranking', label:'🏆 Ranking'},
+  {id:'conta', label:'👤 Conta'},
   {id:'admin', label:'🔒 Admin'}
 ];
 
 function renderTabs(){
   const nav = document.getElementById('tabs');
-  nav.innerHTML = TABS.map(t=>`<button class="${state.tab===t.id?'active':''}" onclick="goTab('${t.id}')">${t.label}</button>`).join('');
+  nav.innerHTML = TABS.map(t=>{
+    let label = t.label;
+    if(t.id==='conta' && state.authUser) label = '👤 ' + state.authUser.email.split('@')[0];
+    return `<button class="${state.tab===t.id?'active':''}" onclick="goTab('${t.id}')">${label}</button>`;
+  }).join('');
 }
 window.goTab = function(id){
   if(state.pomodoro.phase!=='idle' && state.pomodoroConfig.lock && state.pomodoro.phase==='break'){ return; }
@@ -497,6 +531,7 @@ async function render(){
   else if(state.tab==='pomodoro') app.innerHTML = viewPomodoro();
   else if(state.tab==='cronograma') app.innerHTML = viewCronograma();
   else if(state.tab==='ranking') { app.innerHTML = viewRankingLoading(); await loadRanking(); app.innerHTML = viewRanking(); }
+  else if(state.tab==='conta') app.innerHTML = viewConta();
   else if(state.tab==='admin') app.innerHTML = viewAdmin();
   attachHandlers();
 }
@@ -855,6 +890,92 @@ function viewRanking(){
   <button class="btn" onclick="goTab('simulado')">Nova avaliação →</button>`;
 }
 
+/* ============ CONTA / LOGIN ============ */
+function viewConta(){
+  if(!fbAuth){
+    return `
+    <div class="card" style="max-width:460px;margin:40px auto;text-align:center;">
+      <h3>👤 Conta</h3>
+      <p class="small">O login por conta não está disponível neste momento (Firebase não conectado). Seu progresso continua sendo salvo neste navegador.</p>
+    </div>`;
+  }
+  if(state.authUser){
+    return `
+    <div class="card" style="max-width:460px;margin:40px auto;">
+      <h3>👤 Sua conta</h3>
+      <p class="small">Conectado como <b>${state.authUser.email}</b>.</p>
+      <p class="small">Seu progresso de estudo, as configurações do Pomodoro e do cronograma ficam salvos nesta conta e sincronizam em qualquer aparelho onde você entrar.</p>
+      <button class="btn secondary" onclick="doLogout()">Sair da conta</button>
+    </div>`;
+  }
+  const isLogin = state.authView !== 'criar';
+  return `
+  <div class="card" style="max-width:460px;margin:40px auto;">
+    <h3>👤 Entrar ou criar conta</h3>
+    <p class="small">Entre para sincronizar seu progresso de estudo, Pomodoro e cronograma entre celular e computador. Sem conta, o site continua funcionando normalmente, mas salva os dados só neste navegador.</p>
+    <div class="flex-between" style="gap:0;margin-bottom:14px;">
+      <button class="btn ${isLogin?'':'secondary'}" style="flex:1;border-radius:4px 0 0 4px;" onclick="setAuthView('entrar')">Entrar</button>
+      <button class="btn ${isLogin?'secondary':''}" style="flex:1;border-radius:0 4px 4px 0;" onclick="setAuthView('criar')">Criar conta</button>
+    </div>
+    <div class="field"><label>E-mail</label><input type="text" id="authEmail" placeholder="seuemail@exemplo.com"></div>
+    <div class="field"><label>Senha</label><input type="password" id="authPass" placeholder="mínimo 6 caracteres"></div>
+    ${state.authError ? `<div class="errmsg">${state.authError}</div>` : ''}
+    <button class="btn" ${state.authBusy?'disabled':''} onclick="${isLogin?'doLogin()':'doSignup()'}">${state.authBusy?'Aguarde…':(isLogin?'Entrar':'Criar conta')}</button>
+    ${isLogin ? `<p class="small" style="margin-top:10px;"><a href="#" onclick="doResetPassword();return false;">Esqueci minha senha</a></p>` : ''}
+  </div>`;
+}
+
+window.setAuthView = function(v){ state.authView = v; state.authError=''; render(); };
+
+window.doSignup = async function(){
+  const email = (document.getElementById('authEmail').value||'').trim();
+  const pass = document.getElementById('authPass').value||'';
+  state.authError='';
+  if(!email || pass.length<6){ state.authError='Preencha um e-mail válido e uma senha com pelo menos 6 caracteres.'; render(); return; }
+  state.authBusy = true; render();
+  try{
+    await fbAuth.createUserWithEmailAndPassword(email, pass);
+    // o resto (recarregar dados, ir para a tela de conta logada) é tratado pelo onAuthStateChanged
+  }catch(e){ state.authBusy=false; state.authError = translateAuthError(e); render(); }
+};
+
+window.doLogin = async function(){
+  const email = (document.getElementById('authEmail').value||'').trim();
+  const pass = document.getElementById('authPass').value||'';
+  state.authError='';
+  if(!email || !pass){ state.authError='Preencha e-mail e senha.'; render(); return; }
+  state.authBusy = true; render();
+  try{
+    await fbAuth.signInWithEmailAndPassword(email, pass);
+  }catch(e){ state.authBusy=false; state.authError = translateAuthError(e); render(); }
+};
+
+window.doLogout = async function(){ await fbAuth.signOut(); };
+
+window.doResetPassword = async function(){
+  const email = (document.getElementById('authEmail').value||'').trim();
+  if(!email){ state.authError='Digite seu e-mail no campo acima antes de clicar em "Esqueci minha senha".'; render(); return; }
+  try{
+    await fbAuth.sendPasswordResetEmail(email);
+    state.authError='';
+    alert('Enviamos um e-mail com instruções para redefinir sua senha.');
+  }catch(e){ state.authError = translateAuthError(e); render(); }
+};
+
+function translateAuthError(e){
+  const code = e && e.code || '';
+  const map = {
+    'auth/email-already-in-use':'Este e-mail já está cadastrado. Tente entrar em vez de criar uma conta nova.',
+    'auth/invalid-email':'E-mail inválido.',
+    'auth/weak-password':'Senha muito fraca (mínimo 6 caracteres).',
+    'auth/user-not-found':'Não encontramos uma conta com este e-mail.',
+    'auth/wrong-password':'Senha incorreta.',
+    'auth/invalid-credential':'E-mail ou senha incorretos.',
+    'auth/too-many-requests':'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
+  };
+  return map[code] || 'Não foi possível concluir a operação. Tente novamente.';
+}
+
 /* ============ POMODORO ============ */
 function beep(){
   try{
@@ -1157,6 +1278,23 @@ function attachHandlers(){}
 
 /* ============ BOOT ============ */
 (async function(){
+  if(fbAuth){
+    // Espera a primeira resolução do estado de login (sessão salva ou visitante)
+    // antes de carregar os dados pessoais, para buscá-los da fonte certa.
+    await new Promise(resolve=>{
+      const unsub = fbAuth.onAuthStateChanged(user=>{ state.authUser = user; unsub(); resolve(); });
+    });
+    // A partir daqui, reage a logins/logouts feitos durante o uso do site.
+    fbAuth.onAuthStateChanged(async (user)=>{
+      state.authUser = user;
+      state.authBusy = false;
+      state.authError = '';
+      state.studyProgress = (await store.get('studyProgress', false)) || {};
+      state.pomodoroConfig = (await store.get('pomodoroConfig', false)) || state.pomodoroConfig;
+      state.cronogramaConfig = (await store.get('cronogramaConfig', false)) || state.cronogramaConfig;
+      if(state.qbank) render();
+    });
+  }
   await ensureSeed();
   render();
 })();
